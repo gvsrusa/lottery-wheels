@@ -1,15 +1,89 @@
 import { useMemo, useState } from 'react'
 
-const NUMBER_RANGE = Array.from({ length: 35 }, (_, idx) => idx + 1)
-const TIER_OPTIONS = [
-  { id: '4of4b', label: '4/4 + Bonus', defaultChecked: true },
-  { id: '4of4', label: '4/4', defaultChecked: true },
-  { id: '3of4b', label: '3/4 + Bonus', defaultChecked: true },
-  { id: '3of4', label: '3/4', defaultChecked: true },
-  { id: '2of4b', label: '2/4 + Bonus', defaultChecked: false },
-  { id: '2of4', label: '2/4', defaultChecked: false },
-]
-const TIER_LABEL = Object.fromEntries(TIER_OPTIONS.map((tier) => [tier.id, tier.label]))
+// Game configurations
+const GAME_CONFIGS = {
+  'texas-two-step': {
+    name: 'Texas Two Step',
+    mainNumbers: { min: 1, max: 35, pick: 4 },
+    bonusNumbers: { min: 1, max: 35, pick: 1 },
+    hasBonus: true,
+    poolRange: { min: 4, max: 25 },
+    bonusCandidatesMax: 6,
+    description: 'Pick 4 numbers from 1-35 + 1 bonus',
+    tiers: [
+      { id: '4of4b', label: '4/4 + Bonus', defaultChecked: true },
+      { id: '4of4', label: '4/4', defaultChecked: true },
+      { id: '3of4b', label: '3/4 + Bonus', defaultChecked: true },
+      { id: '3of4', label: '3/4', defaultChecked: true },
+      { id: '2of4b', label: '2/4 + Bonus', defaultChecked: false },
+      { id: '2of4', label: '2/4', defaultChecked: false },
+    ],
+  },
+  'lotto-texas': {
+    name: 'Lotto Texas',
+    mainNumbers: { min: 1, max: 54, pick: 6 },
+    bonusNumbers: null,
+    hasBonus: false,
+    poolRange: { min: 6, max: 30 },
+    bonusCandidatesMax: 0,
+    description: 'Pick 6 numbers from 1-54',
+    tiers: [
+      { id: '6of6', label: '6/6 (Jackpot)', defaultChecked: true },
+      { id: '5of6', label: '5/6', defaultChecked: true },
+      { id: '4of6', label: '4/6', defaultChecked: true },
+      { id: '3of6', label: '3/6', defaultChecked: false },
+    ],
+  },
+  'cash-five': {
+    name: 'Texas Cash Five',
+    mainNumbers: { min: 1, max: 35, pick: 5 },
+    bonusNumbers: null,
+    hasBonus: false,
+    poolRange: { min: 5, max: 25 },
+    bonusCandidatesMax: 0,
+    description: 'Pick 5 numbers from 1-35',
+    tiers: [
+      { id: '5of5', label: '5/5 (Jackpot)', defaultChecked: true },
+      { id: '4of5', label: '4/5', defaultChecked: true },
+      { id: '3of5', label: '3/5', defaultChecked: true },
+      { id: '2of5', label: '2/5', defaultChecked: false },
+    ],
+  },
+  'powerball': {
+    name: 'Powerball',
+    mainNumbers: { min: 1, max: 69, pick: 5 },
+    bonusNumbers: { min: 1, max: 26, pick: 1 },
+    hasBonus: true,
+    poolRange: { min: 5, max: 35 },
+    bonusCandidatesMax: 10,
+    description: 'Pick 5 numbers from 1-69 + Powerball from 1-26',
+    tiers: [
+      { id: '5of5b', label: '5/5 + PB (Jackpot)', defaultChecked: true },
+      { id: '5of5', label: '5/5', defaultChecked: true },
+      { id: '4of5b', label: '4/5 + PB', defaultChecked: true },
+      { id: '4of5', label: '4/5', defaultChecked: true },
+      { id: '3of5b', label: '3/5 + PB', defaultChecked: false },
+      { id: '3of5', label: '3/5', defaultChecked: false },
+    ],
+  },
+  'mega-millions': {
+    name: 'Mega Millions',
+    mainNumbers: { min: 1, max: 70, pick: 5 },
+    bonusNumbers: { min: 1, max: 25, pick: 1 },
+    hasBonus: true,
+    poolRange: { min: 5, max: 35 },
+    bonusCandidatesMax: 10,
+    description: 'Pick 5 numbers from 1-70 + Mega Ball from 1-25',
+    tiers: [
+      { id: '5of5b', label: '5/5 + MB (Jackpot)', defaultChecked: true },
+      { id: '5of5', label: '5/5', defaultChecked: true },
+      { id: '4of5b', label: '4/5 + MB', defaultChecked: true },
+      { id: '4of5', label: '4/5', defaultChecked: true },
+      { id: '3of5b', label: '3/5 + MB', defaultChecked: false },
+      { id: '3of5', label: '3/5', defaultChecked: false },
+    ],
+  },
+}
 
 function nCk(n, k) {
   if (k < 0 || k > n) return 0
@@ -181,18 +255,28 @@ function PaginationControls({ currentPage, totalPages, rowsPerPage, totalRows, o
 }
 
 function App() {
+  const [selectedGame, setSelectedGame] = useState('texas-two-step')
   const [pool, setPool] = useState([])
   const [bonusCandidates, setBonusCandidates] = useState([])
   const [drawn, setDrawn] = useState([])
   const [drawnBonus, setDrawnBonus] = useState('')
   const [tiers, setTiers] = useState(() =>
-    Object.fromEntries(TIER_OPTIONS.map((tier) => [tier.id, tier.defaultChecked]))
+    Object.fromEntries(GAME_CONFIGS['texas-two-step'].tiers.map((tier) => [tier.id, tier.defaultChecked]))
   )
   const [summaryCards, setSummaryCards] = useState([])
   const [rows, setRows] = useState([])
   const [hint, setHint] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [rowsPerPage, setRowsPerPage] = useState(50)
+
+  const gameConfig = GAME_CONFIGS[selectedGame]
+  const NUMBER_RANGE = Array.from(
+    { length: gameConfig.mainNumbers.max },
+    (_, idx) => idx + 1
+  )
+  const BONUS_RANGE = gameConfig.hasBonus
+    ? Array.from({ length: gameConfig.bonusNumbers.max }, (_, idx) => idx + 1)
+    : []
 
   const poolsOverlap = useMemo(() => pool.filter((value) => drawn.includes(value)), [pool, drawn])
 
@@ -202,13 +286,31 @@ function App() {
   const endIndex = startIndex + rowsPerPage
   const currentRows = rows.slice(startIndex, endIndex)
 
+  // Handle game change
+  const handleGameChange = (newGame) => {
+    setSelectedGame(newGame)
+    setPool([])
+    setBonusCandidates([])
+    setDrawn([])
+    setDrawnBonus('')
+    setRows([])
+    setSummaryCards([])
+    setHint('')
+    setCurrentPage(1)
+    setTiers(
+      Object.fromEntries(
+        GAME_CONFIGS[newGame].tiers.map((tier) => [tier.id, tier.defaultChecked])
+      )
+    )
+  }
+
   const togglePool = (number, currentlySelected) => {
     setPool((prev) => {
       if (currentlySelected) {
         return prev.filter((value) => value !== number)
       }
-      if (prev.length >= 25) {
-        setHint('Pool is limited to 25 numbers. Remove one before adding another.')
+      if (prev.length >= gameConfig.poolRange.max) {
+        setHint(`Pool is limited to ${gameConfig.poolRange.max} numbers. Remove one before adding another.`)
         return prev
       }
       return [...prev, number].sort((a, b) => a - b)
@@ -220,8 +322,8 @@ function App() {
       if (currentlySelected) {
         return prev.filter((value) => value !== number)
       }
-      if (prev.length >= 6) {
-        setHint('Bonus pool is limited to six candidates.')
+      if (prev.length >= gameConfig.bonusCandidatesMax) {
+        setHint(`Bonus pool is limited to ${gameConfig.bonusCandidatesMax} candidates.`)
         return prev
       }
       return [...prev, number].sort((a, b) => a - b)
@@ -234,8 +336,8 @@ function App() {
         const next = prev.filter((value) => value !== number)
         return next
       }
-      if (prev.length >= 4) {
-        setHint('Drawn mains are capped at four numbers.')
+      if (prev.length >= gameConfig.mainNumbers.pick) {
+        setHint(`Drawn mains are capped at ${gameConfig.mainNumbers.pick} numbers.`)
         return prev
       }
       return [...prev, number].sort((a, b) => a - b)
@@ -259,42 +361,61 @@ function App() {
     setRows([])
     setCurrentPage(1) // Reset to first page
 
-    if (pool.length < 4) {
-      setHint('Select at least 4 numbers in your pool.')
+    const { pick: pickCount } = gameConfig.mainNumbers
+    const minPool = gameConfig.poolRange.min
+    const maxPool = gameConfig.poolRange.max
+
+    if (pool.length < minPool) {
+      setHint(`Select at least ${minPool} numbers in your pool.`)
       return
     }
 
-    if (pool.length > 25) {
-      setHint('Pool cannot exceed 25 numbers.')
+    if (pool.length > maxPool) {
+      setHint(`Pool cannot exceed ${maxPool} numbers.`)
       return
     }
 
-    if (drawn.length !== 4) {
-      setHint('Choose exactly four drawn mains.')
+    if (drawn.length !== pickCount) {
+      setHint(`Choose exactly ${pickCount} drawn mains.`)
       return
     }
 
-    if (trimmedBonus !== '' && (Number.isNaN(parsedDrawBonus) || parsedDrawBonus < 1 || parsedDrawBonus > 35)) {
-      setHint('Drawn bonus must be a number between 1 and 35 or left blank.')
-      return
+    if (gameConfig.hasBonus && trimmedBonus !== '') {
+      const bonusMax = gameConfig.bonusNumbers.max
+      if (Number.isNaN(parsedDrawBonus) || parsedDrawBonus < 1 || parsedDrawBonus > bonusMax) {
+        setHint(`Drawn bonus must be a number between 1 and ${bonusMax} or left blank.`)
+        return
+      }
     }
 
     const K = poolsOverlap.length
-    const totalPerBonus = nCk(pool.length, 4)
-    const N4 = nCk(K, 4)
-    const N3 = nCk(K, 3) * (pool.length - K)
-    const N2 = nCk(K, 2) * nCk(pool.length - K, 2)
+    const totalPerBonus = nCk(pool.length, pickCount)
+
+    // Calculate theoretical matches for different tiers
+    const matchTheory = {}
+    for (let i = pickCount; i >= 2; i--) {
+      const matched = nCk(K, i)
+      const unmatched = i < pickCount ? nCk(pool.length - K, pickCount - i) : 1
+      matchTheory[i] = matched * unmatched
+    }
     const bonusPoolCount = bonusCandidates.length
 
     const summary = [
       { label: 'Pool size (s)', value: pool.length.toLocaleString() },
       { label: 'Drawn mains', value: formatNumbers(drawn) },
       { label: 'K = |S ∩ Draw|', value: K.toLocaleString() },
-      { label: 'Tickets per bonus', value: totalPerBonus.toLocaleString() },
-      { label: '3/4 (theory)', value: N3.toLocaleString() },
-      { label: '4/4 (theory)', value: N4.toLocaleString() },
-      { label: '2/4 (theory)', value: N2.toLocaleString() },
+      { label: gameConfig.hasBonus ? 'Tickets per bonus' : 'Total tickets', value: totalPerBonus.toLocaleString() },
     ]
+
+    // Add match theory cards dynamically
+    for (let i = pickCount; i >= Math.max(2, pickCount - 3); i--) {
+      if (matchTheory[i] !== undefined) {
+        summary.push({
+          label: `${i}/${pickCount} (theory)`,
+          value: matchTheory[i].toLocaleString(),
+        })
+      }
+    }
 
     if (bonusPoolCount > 0) {
       const bonusHit = parsedDrawBonus != null && bonusCandidates.includes(parsedDrawBonus)
@@ -307,12 +428,13 @@ function App() {
       })
     }
 
-    const mainsTickets = kCombinations(pool, 4)
-    const bonuses = bonusPoolCount > 0 ? bonusCandidates : [null]
-    const bonusLogicActive = parsedDrawBonus != null && bonusPoolCount > 0
+    const mainsTickets = kCombinations(pool, pickCount)
+    const bonuses = gameConfig.hasBonus && bonusPoolCount > 0 ? bonusCandidates : [null]
+    const bonusLogicActive = gameConfig.hasBonus && parsedDrawBonus != null && bonusPoolCount > 0
 
     const activeRows = []
     let indexCounter = 1
+    const TIER_LABEL = Object.fromEntries(gameConfig.tiers.map((tier) => [tier.id, tier.label]))
 
     for (const ticket of mainsTickets) {
       const matchedMains = ticket.filter((value) => drawn.includes(value)).length
@@ -321,15 +443,14 @@ function App() {
         const bonusHit = bonusLogicActive && bonus === parsedDrawBonus
         let tierKey = null
 
-        if (matchedMains === 4) {
-          tierKey = bonusHit ? '4of4b' : '4of4'
-        } else if (matchedMains === 3) {
-          tierKey = bonusHit ? '3of4b' : '3of4'
-        } else if (matchedMains === 2) {
-          tierKey = bonusHit ? '2of4b' : '2of4'
+        // Dynamic tier key generation based on matches
+        if (gameConfig.hasBonus) {
+          tierKey = bonusHit ? `${matchedMains}of${pickCount}b` : `${matchedMains}of${pickCount}`
+        } else {
+          tierKey = `${matchedMains}of${pickCount}`
         }
 
-        if (!tierKey || !tiers[tierKey]) {
+        if (!tiers[tierKey]) {
           continue
         }
 
@@ -339,7 +460,7 @@ function App() {
           bonus: bonus ?? '—',
           match: matchedMains,
           bonusHit: bonusLogicActive ? (bonusHit ? 'Yes' : 'No') : '—',
-          tier: TIER_LABEL[tierKey],
+          tier: TIER_LABEL[tierKey] || tierKey,
         })
         indexCounter += 1
       }
@@ -389,14 +510,33 @@ function App() {
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-violet-900/20 pointer-events-none"></div>
 
       {/* Header */}
-      <header className="relative border-b border-slate-800/50 bg-slate-900/60 backdrop-blur-xl px-6 py-8 shadow-2xl">
-        <h1 className="text-4xl sm:text-5xl font-black tracking-tight bg-gradient-to-r from-cyan-400 via-blue-500 to-violet-500 bg-clip-text text-transparent drop-shadow-2xl">
-          Texas Two Step
-        </h1>
-        <p className="text-slate-300 text-base sm:text-lg font-medium mt-2 flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-          Dynamic 4-of-N Combination Generator
-        </p>
+      <header className="relative border-b border-slate-800/50 bg-slate-900/60 backdrop-blur-xl px-6 py-6 sm:py-8 shadow-2xl">
+        <div className="max-w-[1800px] mx-auto">
+          <h1 className="text-3xl sm:text-5xl font-black tracking-tight bg-gradient-to-r from-cyan-400 via-blue-500 to-violet-500 bg-clip-text text-transparent drop-shadow-2xl">
+            {gameConfig.name}
+          </h1>
+          <p className="text-slate-300 text-sm sm:text-lg font-medium mt-2 flex items-center gap-2">
+            <span className="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+            {gameConfig.description}
+          </p>
+
+          {/* Game Selector */}
+          <div className="mt-6 flex flex-wrap gap-2">
+            {Object.entries(GAME_CONFIGS).map(([key, config]) => (
+              <button
+                key={key}
+                onClick={() => handleGameChange(key)}
+                className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 ${
+                  selectedGame === key
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-blue-500/50 scale-105'
+                    : 'bg-slate-800/80 text-slate-300 border-2 border-slate-700 hover:border-blue-500/50 hover:bg-slate-700'
+                }`}
+              >
+                {config.name}
+              </button>
+            ))}
+          </div>
+        </div>
       </header>
 
       <main className="relative grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6 p-4 sm:p-6 max-w-[1800px] mx-auto">
@@ -409,14 +549,15 @@ function App() {
           <div className="flex justify-between items-center mb-6">
             <label className="text-slate-200 font-bold text-sm uppercase tracking-wide">Game Range</label>
             <span className="inline-flex items-center gap-2 bg-slate-700/50 border border-slate-600 px-4 py-2 rounded-full text-xs text-slate-300 font-medium">
-              Mains: 1–35 · Bonus: 1–35
+              Mains: {gameConfig.mainNumbers.min}–{gameConfig.mainNumbers.max}
+              {gameConfig.hasBonus && ` · Bonus: ${gameConfig.bonusNumbers.min}–${gameConfig.bonusNumbers.max}`}
             </span>
           </div>
 
           {/* Pool Selection */}
           <div className="mb-6">
             <label className="block text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 font-black text-base mb-4 uppercase tracking-wider">
-              Your Pool <span className="text-slate-400 text-xs normal-case font-medium">(select 4–25)</span>
+              Your Pool <span className="text-slate-400 text-xs normal-case font-medium">(select {gameConfig.poolRange.min}–{gameConfig.poolRange.max})</span>
             </label>
             <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 sm:gap-2.5 mb-4">
               {NUMBER_RANGE.map((num) => (
@@ -441,40 +582,44 @@ function App() {
             </div>
           </div>
 
-          {/* Bonus Selection */}
-          <div className="mb-6">
-            <label className="block text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-500 font-black text-base mb-4 uppercase tracking-wider">
-              Bonus Candidates <span className="text-slate-400 text-xs normal-case font-medium">(optional, 0–6)</span>
-            </label>
-            <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 sm:gap-2.5 mb-4">
-              {NUMBER_RANGE.map((num) => (
-                <NumberChip
-                  key={`bonus-${num}`}
-                  number={num}
-                  selected={bonusCandidates.includes(num)}
-                  onToggle={toggleBonus}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 px-4 py-2 rounded-full text-xs text-slate-300 font-medium">
-                Selected: <strong className="text-purple-400 text-base">{bonusCandidates.length}</strong>
-              </span>
-              <button
-                onClick={clearBonus}
-                className="bg-slate-700/50 border border-slate-600 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-600 hover:border-slate-500 transition-all duration-200"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
+          {/* Bonus Selection - Only show if game has bonus */}
+          {gameConfig.hasBonus && (
+            <>
+              <div className="mb-6">
+                <label className="block text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-500 font-black text-base mb-4 uppercase tracking-wider">
+                  Bonus Candidates <span className="text-slate-400 text-xs normal-case font-medium">(optional, 0–{gameConfig.bonusCandidatesMax})</span>
+                </label>
+                <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 sm:gap-2.5 mb-4">
+                  {BONUS_RANGE.map((num) => (
+                    <NumberChip
+                      key={`bonus-${num}`}
+                      number={num}
+                      selected={bonusCandidates.includes(num)}
+                      onToggle={toggleBonus}
+                    />
+                  ))}
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 px-4 py-2 rounded-full text-xs text-slate-300 font-medium">
+                    Selected: <strong className="text-purple-400 text-base">{bonusCandidates.length}</strong>
+                  </span>
+                  <button
+                    onClick={clearBonus}
+                    className="bg-slate-700/50 border border-slate-600 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-600 hover:border-slate-500 transition-all duration-200"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
 
-          <hr className="border-slate-700/50 my-6" />
+              <hr className="border-slate-700/50 my-6" />
+            </>
+          )}
 
           {/* Drawn Mains */}
           <div className="mb-6">
             <label className="block text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500 font-black text-base mb-4 uppercase tracking-wider">
-              Drawn Mains <span className="text-slate-400 text-xs normal-case font-medium">(exactly 4)</span>
+              Drawn Mains <span className="text-slate-400 text-xs normal-case font-medium">(exactly {gameConfig.mainNumbers.pick})</span>
             </label>
             <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 sm:gap-2.5 mb-4">
               {NUMBER_RANGE.map((num) => (
@@ -488,7 +633,7 @@ function App() {
             </div>
             <div className="flex items-center gap-3">
               <span className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 px-4 py-2 rounded-full text-xs text-slate-300 font-medium">
-                Chosen: <strong className="text-green-400 text-base">{drawn.length}</strong>/4
+                Chosen: <strong className="text-green-400 text-base">{drawn.length}</strong>/{gameConfig.mainNumbers.pick}
               </span>
               <button
                 onClick={clearDraw}
@@ -499,32 +644,36 @@ function App() {
             </div>
           </div>
 
-          {/* Drawn Bonus */}
-          <div className="mb-6">
-            <label className="block text-slate-200 font-bold text-sm mb-3 uppercase tracking-wide">
-              Drawn Bonus <span className="text-slate-400 text-xs normal-case">(optional)</span>
-            </label>
-            <div className="flex items-center gap-3">
-              <input
-                type="number"
-                min="1"
-                max="35"
-                placeholder="—"
-                value={drawnBonus}
-                onChange={(event) => setDrawnBonus(event.target.value)}
-                className="w-24 px-4 py-3 rounded-xl border-2 border-slate-600 bg-slate-700/50 text-slate-100 text-sm font-semibold focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-              />
-              <span className="text-slate-400 text-xs">Leave empty to ignore bonus tiers</span>
-            </div>
-          </div>
+          {/* Drawn Bonus - Only show if game has bonus */}
+          {gameConfig.hasBonus && (
+            <>
+              <div className="mb-6">
+                <label className="block text-slate-200 font-bold text-sm mb-3 uppercase tracking-wide">
+                  Drawn Bonus <span className="text-slate-400 text-xs normal-case">(optional)</span>
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={gameConfig.bonusNumbers.min}
+                    max={gameConfig.bonusNumbers.max}
+                    placeholder="—"
+                    value={drawnBonus}
+                    onChange={(event) => setDrawnBonus(event.target.value)}
+                    className="w-24 px-4 py-3 rounded-xl border-2 border-slate-600 bg-slate-700/50 text-slate-100 text-sm font-semibold focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+                  />
+                  <span className="text-slate-400 text-xs">Leave empty to ignore bonus tiers</span>
+                </div>
+              </div>
 
-          <hr className="border-slate-700/50 my-6" />
+              <hr className="border-slate-700/50 my-6" />
+            </>
+          )}
 
           {/* Tiers */}
           <div className="mb-6">
             <label className="block text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-orange-500 font-black text-base mb-4 uppercase tracking-wider">Show Tiers</label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {TIER_OPTIONS.map((tier) => (
+              {gameConfig.tiers.map((tier) => (
                 <label key={tier.id} className="flex items-center gap-3 text-sm bg-slate-800/50 border-2 border-slate-600/50 px-4 py-3.5 rounded-xl hover:bg-slate-700/50 hover:border-blue-500/50 cursor-pointer transition-all duration-200 active:scale-95">
                   <input
                     type="checkbox"
