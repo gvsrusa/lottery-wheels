@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-This is a "lottery-wheels" PWA built with React + Vite. Currently it contains the default Vite React template but is intended to become a lottery wheel application.
+This is a lottery wheel PWA for Texas Two Step lottery analysis. It's a React + Vite application that generates dynamic 4-of-N lottery combinations with optional bonus number handling and prize tier filtering.
 
 ## Development Commands
 
@@ -15,22 +15,35 @@ This is a "lottery-wheels" PWA built with React + Vite. Currently it contains th
 
 ## Architecture
 
-- **Frontend Framework**: React 19.1.1 with modern hooks (useState, etc.)
+- **Frontend Framework**: React 19.1.1 with modern hooks (useState, useMemo)
 - **Build Tool**: Vite 7.1.6 with React plugin
-- **Linting**: ESLint with React-specific rules
+- **Styling**: Tailwind CSS v4 with custom theme extensions and dark gradient design
+- **Linting**: ESLint with React hooks and refresh plugins
 - **Entry Point**: `src/main.jsx` renders the root App component
-- **Main Component**: `src/App.jsx` - currently a basic counter demo
-- **Styling**: CSS files (App.css, index.css)
-- **Static Assets**: `public/` directory with Vite logo
+- **Main Component**: `src/App.jsx` - complete lottery combination generator
 
-## Code Structure
+## Application Structure
 
-- `src/main.jsx` - Application entry point using React 18+ createRoot API
-- `src/App.jsx` - Main application component
-- `src/` - All React components and styles
-- `public/` - Static assets served directly
-- `index.html` - HTML template with root div
+The app is a single-page application with:
+- **Pool Selection**: Users select 4-25 numbers from 1-35 for their lottery pool
+- **Bonus Candidates**: Optional selection of up to 6 bonus numbers
+- **Drawn Numbers**: Input for exactly 4 drawn main numbers and optional bonus
+- **Tier Filtering**: Checkboxes for different prize tiers (4/4, 3/4, 2/4 with/without bonus)
+- **Combination Generation**: Generates all possible 4-number combinations from the pool
+- **Results Display**: Shows matching combinations in a sortable table with CSV export
 
-## Notes
+## Key Features
 
-The project currently contains the default Vite React template. The actual lottery wheel functionality needs to be implemented.
+- **Mathematical Functions**: `nCk()` for combinations, `kCombinations()` for generating all k-combinations
+- **CSV Export**: `toCSV()` function generates downloadable CSV files
+- **Responsive Design**: Grid layouts that adapt from mobile to desktop
+- **Real-time Validation**: Immediate feedback on user inputs and constraints
+- **Prize Tier Logic**: Calculates matches and bonus hits for different payout levels
+
+## Code Conventions
+
+- Uses modern ES modules and React function components exclusively
+- PascalCase for components, camelCase for functions and variables
+- Two-space indentation
+- Tailwind utility classes for all styling
+- No external state management - uses React's built-in useState and useMemo
