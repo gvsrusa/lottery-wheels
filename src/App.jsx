@@ -81,6 +81,105 @@ function StatCard({ label, value }) {
   )
 }
 
+function PaginationControls({ currentPage, totalPages, rowsPerPage, totalRows, onPageChange, onRowsPerPageChange }) {
+  const pageNumbers = []
+  const maxVisiblePages = 5
+
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2))
+  let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1)
+
+  if (endPage - startPage < maxVisiblePages - 1) {
+    startPage = Math.max(1, endPage - maxVisiblePages + 1)
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
+    pageNumbers.push(i)
+  }
+
+  if (totalRows === 0) return null
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+      {/* Rows per page */}
+      <div className="flex items-center gap-3">
+        <label className="text-slate-300 text-sm font-medium">Rows per page:</label>
+        <select
+          value={rowsPerPage}
+          onChange={(e) => onRowsPerPageChange(Number(e.target.value))}
+          className="px-3 py-2 rounded-lg bg-slate-800 border-2 border-slate-600 text-slate-200 font-semibold focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+        >
+          <option value={25}>25</option>
+          <option value={50}>50</option>
+          <option value={100}>100</option>
+          <option value={200}>200</option>
+        </select>
+      </div>
+
+      {/* Page info */}
+      <div className="text-slate-300 text-sm font-medium">
+        Showing <span className="text-cyan-400 font-bold">{(currentPage - 1) * rowsPerPage + 1}</span> to{' '}
+        <span className="text-cyan-400 font-bold">{Math.min(currentPage * rowsPerPage, totalRows)}</span> of{' '}
+        <span className="text-cyan-400 font-bold">{totalRows}</span> results
+      </div>
+
+      {/* Page navigation */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onPageChange(1)}
+          disabled={currentPage === 1}
+          className="px-3 py-2 rounded-lg bg-slate-800 border-2 border-slate-600 text-slate-300 font-bold hover:bg-slate-700 hover:border-blue-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >
+          ««
+        </button>
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="px-3 py-2 rounded-lg bg-slate-800 border-2 border-slate-600 text-slate-300 font-bold hover:bg-slate-700 hover:border-blue-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >
+          ‹
+        </button>
+
+        {startPage > 1 && (
+          <span className="px-2 text-slate-500">...</span>
+        )}
+
+        {pageNumbers.map((pageNum) => (
+          <button
+            key={pageNum}
+            onClick={() => onPageChange(pageNum)}
+            className={`px-4 py-2 rounded-lg font-bold transition-all ${
+              pageNum === currentPage
+                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-2 border-cyan-400 shadow-lg shadow-blue-500/50'
+                : 'bg-slate-800 border-2 border-slate-600 text-slate-300 hover:bg-slate-700 hover:border-blue-500/50'
+            }`}
+          >
+            {pageNum}
+          </button>
+        ))}
+
+        {endPage < totalPages && (
+          <span className="px-2 text-slate-500">...</span>
+        )}
+
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="px-3 py-2 rounded-lg bg-slate-800 border-2 border-slate-600 text-slate-300 font-bold hover:bg-slate-700 hover:border-blue-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >
+          ›
+        </button>
+        <button
+          onClick={() => onPageChange(totalPages)}
+          disabled={currentPage === totalPages}
+          className="px-3 py-2 rounded-lg bg-slate-800 border-2 border-slate-600 text-slate-300 font-bold hover:bg-slate-700 hover:border-blue-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >
+          »»
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function App() {
   const [pool, setPool] = useState([])
   const [bonusCandidates, setBonusCandidates] = useState([])
@@ -92,8 +191,16 @@ function App() {
   const [summaryCards, setSummaryCards] = useState([])
   const [rows, setRows] = useState([])
   const [hint, setHint] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const [rowsPerPage, setRowsPerPage] = useState(50)
 
   const poolsOverlap = useMemo(() => pool.filter((value) => drawn.includes(value)), [pool, drawn])
+
+  // Pagination calculations
+  const totalPages = Math.ceil(rows.length / rowsPerPage)
+  const startIndex = (currentPage - 1) * rowsPerPage
+  const endIndex = startIndex + rowsPerPage
+  const currentRows = rows.slice(startIndex, endIndex)
 
   const togglePool = (number, currentlySelected) => {
     setPool((prev) => {
@@ -150,6 +257,7 @@ function App() {
     setHint('')
     setSummaryCards([])
     setRows([])
+    setCurrentPage(1) // Reset to first page
 
     if (pool.length < 4) {
       setHint('Select at least 4 numbers in your pool.')
@@ -236,6 +344,12 @@ function App() {
         indexCounter += 1
       }
     }
+
+    // Add combinations count to summary
+    summary.splice(4, 0, {
+      label: 'Combinations shown',
+      value: activeRows.length.toLocaleString()
+    })
 
     if (activeRows.length > 12000) {
       setHint(`Large output (${activeRows.length.toLocaleString()} rows). Consider narrowing tiers or reducing pool size.`)
@@ -476,9 +590,24 @@ function App() {
 
           {/* Combinations */}
           <h3 className="text-3xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-500">Combinations</h3>
-          <div className="max-h-[60vh] overflow-auto border-2 border-slate-700/50 rounded-2xl bg-slate-900/60 backdrop-blur-sm shadow-inner">
+
+          {/* Pagination Controls - Top */}
+          <PaginationControls
+            currentPage={currentPage}
+            totalPages={totalPages}
+            rowsPerPage={rowsPerPage}
+            totalRows={rows.length}
+            onPageChange={setCurrentPage}
+            onRowsPerPageChange={(newRowsPerPage) => {
+              setRowsPerPage(newRowsPerPage)
+              setCurrentPage(1)
+            }}
+          />
+
+          {/* Table */}
+          <div className="border-2 border-slate-700/50 rounded-2xl bg-slate-900/60 backdrop-blur-sm shadow-inner mt-4 overflow-x-auto">
             <table className="w-full">
-              <thead className="sticky top-0 bg-slate-800/95 z-10 backdrop-blur-md">
+              <thead className="bg-slate-800/95 backdrop-blur-md">
                 <tr className="border-b-2 border-blue-500/30">
                   <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">#</th>
                   <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Mains</th>
@@ -489,23 +618,48 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {rows.map((row, idx) => (
-                  <tr key={row.id} className={`hover:bg-blue-500/10 transition-all duration-200 ${idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'}`}>
-                    <td className="px-3 sm:px-4 py-3 text-sm text-slate-500 border-b border-slate-700/30 font-medium">{row.id}</td>
-                    <td className="px-3 sm:px-4 py-3 text-sm font-bold text-slate-200 border-b border-slate-700/30">{row.mains}</td>
-                    <td className="px-3 sm:px-4 py-3 text-sm text-slate-300 border-b border-slate-700/30 font-medium">{row.bonus}</td>
-                    <td className="px-3 sm:px-4 py-3 text-sm text-right font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 border-b border-slate-700/30">{row.match}</td>
-                    <td className="px-3 sm:px-4 py-3 text-sm text-slate-300 border-b border-slate-700/30 font-medium hidden sm:table-cell">{row.bonusHit}</td>
-                    <td className="px-3 sm:px-4 py-3 text-sm border-b border-slate-700/30">
-                      <span className="inline-block text-xs px-3 py-1.5 bg-gradient-to-r from-blue-500/30 to-violet-500/30 border border-blue-400/50 rounded-full text-blue-300 font-bold shadow-lg">
-                        {row.tier}
-                      </span>
+                {currentRows.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" className="px-4 py-12 text-center text-slate-400 text-sm">
+                      No combinations to display. Generate results to see combinations here.
                     </td>
                   </tr>
-                ))}
+                ) : (
+                  currentRows.map((row, idx) => (
+                    <tr key={row.id} className={`hover:bg-blue-500/10 transition-all duration-200 ${idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'}`}>
+                      <td className="px-3 sm:px-4 py-3 text-sm text-slate-500 border-b border-slate-700/30 font-medium">{row.id}</td>
+                      <td className="px-3 sm:px-4 py-3 text-sm font-bold text-slate-200 border-b border-slate-700/30">{row.mains}</td>
+                      <td className="px-3 sm:px-4 py-3 text-sm text-slate-300 border-b border-slate-700/30 font-medium">{row.bonus}</td>
+                      <td className="px-3 sm:px-4 py-3 text-sm text-right font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 border-b border-slate-700/30">{row.match}</td>
+                      <td className="px-3 sm:px-4 py-3 text-sm text-slate-300 border-b border-slate-700/30 font-medium hidden sm:table-cell">{row.bonusHit}</td>
+                      <td className="px-3 sm:px-4 py-3 text-sm border-b border-slate-700/30">
+                        <span className="inline-block text-xs px-3 py-1.5 bg-gradient-to-r from-blue-500/30 to-violet-500/30 border border-blue-400/50 rounded-full text-blue-300 font-bold shadow-lg">
+                          {row.tier}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls - Bottom */}
+          {rows.length > 0 && (
+            <div className="mt-4">
+              <PaginationControls
+                currentPage={currentPage}
+                totalPages={totalPages}
+                rowsPerPage={rowsPerPage}
+                totalRows={rows.length}
+                onPageChange={setCurrentPage}
+                onRowsPerPageChange={(newRowsPerPage) => {
+                  setRowsPerPage(newRowsPerPage)
+                  setCurrentPage(1)
+                }}
+              />
+            </div>
+          )}
           </div>
         </section>
       </main>
