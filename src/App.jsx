@@ -186,6 +186,29 @@ function findMinimumCoverage(pool, k, minMatches) {
   return selectedCombinations
 }
 
+// Check if a set of combinations provides coverage for a given match level
+function checkCoverageLevel(combinations, pool, k, minMatches) {
+  const allPossibleDraws = kCombinations(pool, k)
+
+  for (const draw of allPossibleDraws) {
+    let hasCoverage = false
+
+    for (const combo of combinations) {
+      const matches = combo.filter(num => draw.includes(num)).length
+      if (matches >= minMatches) {
+        hasCoverage = true
+        break
+      }
+    }
+
+    if (!hasCoverage) {
+      return false
+    }
+  }
+
+  return true
+}
+
 function NumberChip({ number, selected, onToggle }) {
   const selectedClasses = selected
     ? 'bg-gradient-to-br from-cyan-400 via-blue-500 to-violet-600 text-white border-cyan-300 shadow-2xl shadow-blue-500/60 scale-110 ring-4 ring-blue-400/30'
@@ -381,6 +404,7 @@ function CoverageAnalysisTab({
 
     // Calculate coverage for each selected level
     const allResults = []
+    const coverageBreakdown = [] // New: breakdown table data
     const summary = [
       { label: 'Pool size', value: coveragePool.length.toLocaleString() },
       { label: `Total possible ${pickCount}-draws`, value: nCk(coveragePool.length, pickCount).toLocaleString() },
@@ -391,10 +415,24 @@ function CoverageAnalysisTab({
     for (const level of checkedLevels.sort((a, b) => b - a)) {
       const minCombos = findMinimumCoverage(coveragePool, pickCount, level)
 
-      summary.push({
-        label: `${level}/${pickCount} coverage`,
-        value: `${minCombos.length} combos`,
+      // Add primary coverage level to breakdown table
+      coverageBreakdown.push({
+        level: `${level}/${pickCount}`,
+        combos: minCombos.length,
+        type: 'Primary',
       })
+
+      // Check if these combinations also provide coverage for lower levels
+      for (let lowerLevel = level - 1; lowerLevel >= 2; lowerLevel--) {
+        const hasLowerCoverage = checkCoverageLevel(minCombos, coveragePool, pickCount, lowerLevel)
+        if (hasLowerCoverage) {
+          coverageBreakdown.push({
+            level: `${lowerLevel}/${pickCount}`,
+            combos: minCombos.length,
+            type: 'Also covered',
+          })
+        }
+      }
 
       // Add all combinations for this level to results
       for (const combo of minCombos) {
@@ -402,6 +440,7 @@ function CoverageAnalysisTab({
           id: indexCounter,
           mains: formatNumbers(combo),
           coverageLevel: `${level}/${pickCount}`,
+          breakdownData: coverageBreakdown, // Pass breakdown data to each result
         })
         indexCounter += 1
       }
@@ -565,6 +604,41 @@ function CoverageAnalysisTab({
                 <StatCard key={card.label} label={card.label} value={card.value} />
               ))}
             </div>
+          )}
+
+          {/* Coverage Breakdown Table */}
+          {coverageResults.length > 0 && coverageResults[0]?.breakdownData && (
+            <>
+              <h3 className="text-3xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500">Coverage Breakdown</h3>
+              <div className="border-2 border-slate-700/50 rounded-2xl bg-slate-900/60 backdrop-blur-sm shadow-inner mb-8 overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-800/95 backdrop-blur-md">
+                    <tr className="border-b-2 border-emerald-500/30">
+                      <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Coverage Level</th>
+                      <th className="px-3 sm:px-4 py-4 text-right text-xs font-black uppercase tracking-widest text-slate-300">Combinations</th>
+                      <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Type</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {coverageResults[0].breakdownData.map((breakdown, idx) => (
+                      <tr key={`${breakdown.level}-${idx}`} className={`hover:bg-emerald-500/10 transition-all duration-200 ${idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'}`}>
+                        <td className="px-3 sm:px-4 py-3 text-sm font-bold text-slate-200 border-b border-slate-700/30">{breakdown.level}</td>
+                        <td className="px-3 sm:px-4 py-3 text-sm text-right font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500 border-b border-slate-700/30">{breakdown.combos}</td>
+                        <td className="px-3 sm:px-4 py-3 text-sm border-b border-slate-700/30">
+                          <span className={`inline-block text-xs px-3 py-1.5 rounded-full font-bold shadow-lg ${
+                            breakdown.type === 'Primary'
+                              ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 border border-cyan-400/50 text-cyan-300'
+                              : 'bg-gradient-to-r from-green-500/30 to-emerald-500/30 border border-green-400/50 text-green-300'
+                          }`}>
+                            {breakdown.type}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
 
           {/* Results */}
