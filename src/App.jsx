@@ -402,58 +402,70 @@ function CoverageAnalysisTab({
       return
     }
 
-    // Calculate coverage for each selected level
-    const allResults = []
-    const coverageBreakdown = [] // New: breakdown table data
+    // Generate ALL possible combinations from the pool
+    const allCombos = kCombinations(coveragePool, pickCount)
+
     const summary = [
       { label: 'Pool size', value: coveragePool.length.toLocaleString() },
-      { label: `Total possible ${pickCount}-draws`, value: nCk(coveragePool.length, pickCount).toLocaleString() },
+      { label: `Total ${pickCount}-number combinations`, value: allCombos.length.toLocaleString() },
     ]
 
-    let indexCounter = 1
+    // Calculate breakdown: for each match level, calculate statistics
+    const coverageBreakdown = []
 
-    for (const level of checkedLevels.sort((a, b) => b - a)) {
-      const minCombos = findMinimumCoverage(coveragePool, pickCount, level)
+    for (let matchLevel = pickCount; matchLevel >= 2; matchLevel--) {
+      // Calculate: if exactly 'matchLevel' numbers from pool are drawn,
+      // how many of our combinations will have exactly 'matchLevel' matches?
 
-      // Add primary coverage level to breakdown table
-      coverageBreakdown.push({
-        level: `${level}/${pickCount}`,
-        combos: minCombos.length,
-        type: 'Primary',
-      })
+      // Generate all possible scenarios where exactly matchLevel numbers from pool are drawn
+      const poolSubsets = kCombinations(coveragePool, matchLevel)
 
-      // Check if these combinations also provide coverage for lower levels
-      for (let lowerLevel = level - 1; lowerLevel >= 2; lowerLevel--) {
-        const hasLowerCoverage = checkCoverageLevel(minCombos, coveragePool, pickCount, lowerLevel)
-        if (hasLowerCoverage) {
-          coverageBreakdown.push({
-            level: `${lowerLevel}/${pickCount}`,
-            combos: minCombos.length,
-            type: 'Also covered',
-          })
+      let minWinningCombos = Infinity
+
+      // For each scenario, count how many combos win
+      for (const drawnFromPool of poolSubsets) {
+        let winningCount = 0
+
+        for (const combo of allCombos) {
+          // Count matches between combo and drawn pool numbers
+          const matches = combo.filter(num => drawnFromPool.includes(num)).length
+          if (matches === matchLevel) {
+            winningCount++
+          }
         }
+
+        minWinningCombos = Math.min(minWinningCombos, winningCount)
       }
 
-      // Add all combinations for this level to results
-      for (const combo of minCombos) {
-        allResults.push({
-          id: indexCounter,
-          mains: formatNumbers(combo),
-          coverageLevel: `${level}/${pickCount}`,
-          breakdownData: coverageBreakdown, // Pass breakdown data to each result
-        })
-        indexCounter += 1
-      }
+      coverageBreakdown.push({
+        level: `${matchLevel}/${pickCount}`,
+        combos: minWinningCombos === Infinity ? 0 : minWinningCombos,
+        type: checkedLevels.includes(matchLevel) ? 'Selected' : 'Info',
+      })
     }
 
     summary.push({
-      label: 'Total combinations',
-      value: allResults.length.toLocaleString(),
+      label: 'Match breakdown',
+      value: 'See table below',
     })
+
+    // Add all combinations to results
+    const allResults = []
+    let indexCounter = 1
+
+    for (const combo of allCombos) {
+      allResults.push({
+        id: indexCounter,
+        mains: formatNumbers(combo),
+        coverageLevel: 'All combinations',
+        breakdownData: coverageBreakdown,
+      })
+      indexCounter += 1
+    }
 
     setCoverageSummary(summary)
     setCoverageResults(allResults)
-    setCoverageHint(`${allResults.length.toLocaleString()} combinations generated.`)
+    setCoverageHint(`${allResults.length.toLocaleString()} combinations generated from your pool.`)
   }
 
   const handleDownloadCoverage = () => {
