@@ -1,12 +1,328 @@
 import { useMemo, useState } from 'react'
-import { GAME_CONFIGS } from './utils/constants'
-import { nCk, kCombinations, findMinimumCovering } from './utils/combinatorics'
-import { toCSV, formatNumbers } from './utils/formatters'
-import { Loader } from './components/common/Loader'
-import { NumberChip } from './components/common/NumberChip'
-import { StatCard } from './components/common/StatCard'
-import { PaginationControls } from './components/common/PaginationControls'
 
+// Game configurations
+const GAME_CONFIGS = {
+  'texas-two-step': {
+    name: 'Texas Two Step',
+    mainNumbers: { min: 1, max: 35, pick: 4 },
+    bonusNumbers: { min: 1, max: 35, pick: 1 },
+    hasBonus: true,
+    poolRange: { min: 4, max: 25 },
+    bonusCandidatesMax: 6,
+    description: 'Pick 4 numbers from 1-35 + 1 bonus',
+    tiers: [
+      { id: '4of4b', label: '4/4 + Bonus', defaultChecked: true },
+      { id: '4of4', label: '4/4', defaultChecked: true },
+      { id: '3of4b', label: '3/4 + Bonus', defaultChecked: true },
+      { id: '3of4', label: '3/4', defaultChecked: true },
+      { id: '2of4b', label: '2/4 + Bonus', defaultChecked: false },
+      { id: '2of4', label: '2/4', defaultChecked: false },
+    ],
+  },
+  'lotto-texas': {
+    name: 'Lotto Texas',
+    mainNumbers: { min: 1, max: 54, pick: 6 },
+    bonusNumbers: null,
+    hasBonus: false,
+    poolRange: { min: 6, max: 30 },
+    bonusCandidatesMax: 0,
+    description: 'Pick 6 numbers from 1-54',
+    tiers: [
+      { id: '6of6', label: '6/6 (Jackpot)', defaultChecked: true },
+      { id: '5of6', label: '5/6', defaultChecked: true },
+      { id: '4of6', label: '4/6', defaultChecked: true },
+      { id: '3of6', label: '3/6', defaultChecked: false },
+    ],
+  },
+  'cash-five': {
+    name: 'Texas Cash Five',
+    mainNumbers: { min: 1, max: 35, pick: 5 },
+    bonusNumbers: null,
+    hasBonus: false,
+    poolRange: { min: 5, max: 25 },
+    bonusCandidatesMax: 0,
+    description: 'Pick 5 numbers from 1-35',
+    tiers: [
+      { id: '5of5', label: '5/5 (Jackpot)', defaultChecked: true },
+      { id: '4of5', label: '4/5', defaultChecked: true },
+      { id: '3of5', label: '3/5', defaultChecked: true },
+      { id: '2of5', label: '2/5', defaultChecked: false },
+    ],
+  },
+  'powerball': {
+    name: 'Powerball',
+    mainNumbers: { min: 1, max: 69, pick: 5 },
+    bonusNumbers: { min: 1, max: 26, pick: 1 },
+    hasBonus: true,
+    poolRange: { min: 5, max: 35 },
+    bonusCandidatesMax: 10,
+    description: 'Pick 5 numbers from 1-69 + Powerball from 1-26',
+    tiers: [
+      { id: '5of5b', label: '5/5 + PB (Jackpot)', defaultChecked: true },
+      { id: '5of5', label: '5/5', defaultChecked: true },
+      { id: '4of5b', label: '4/5 + PB', defaultChecked: true },
+      { id: '4of5', label: '4/5', defaultChecked: true },
+      { id: '3of5b', label: '3/5 + PB', defaultChecked: false },
+      { id: '3of5', label: '3/5', defaultChecked: false },
+    ],
+  },
+  'mega-millions': {
+    name: 'Mega Millions',
+    mainNumbers: { min: 1, max: 70, pick: 5 },
+    bonusNumbers: { min: 1, max: 25, pick: 1 },
+    hasBonus: true,
+    poolRange: { min: 5, max: 35 },
+    bonusCandidatesMax: 10,
+    description: 'Pick 5 numbers from 1-70 + Mega Ball from 1-25',
+    tiers: [
+      { id: '5of5b', label: '5/5 + MB (Jackpot)', defaultChecked: true },
+      { id: '5of5', label: '5/5', defaultChecked: true },
+      { id: '4of5b', label: '4/5 + MB', defaultChecked: true },
+      { id: '4of5', label: '4/5', defaultChecked: true },
+      { id: '3of5b', label: '3/5 + MB', defaultChecked: false },
+      { id: '3of5', label: '3/5', defaultChecked: false },
+    ],
+  },
+}
+
+function nCk(n, k) {
+  if (k < 0 || k > n) return 0
+  const limit = Math.min(k, n - k)
+  let numerator = 1
+  let denominator = 1
+  for (let i = 1; i <= limit; i += 1) {
+    numerator *= n - limit + i
+    denominator *= i
+  }
+  return numerator / denominator
+}
+
+function kCombinations(values, k) {
+  const result = []
+  const stack = []
+
+  function backtrack(start) {
+    if (stack.length === k) {
+      result.push([...stack])
+      return
+    }
+    for (let i = start; i < values.length; i += 1) {
+      stack.push(values[i])
+      backtrack(i + 1)
+      stack.pop()
+    }
+  }
+
+  backtrack(0)
+  return result
+}
+
+function toCSV(rows) {
+  return rows
+    .map((row) => row.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+    .join('\n')
+}
+
+function formatNumbers(numbers) {
+  return numbers.join('-')
+}
+
+// Greedy covering algorithm - generates minimal set of k-combinations that cover all t-subsets
+function findMinimumCovering(pool, k, t) {
+  // Generate all t-subsets from pool (these are what we want to cover)
+  const targetSubsets = kCombinations(pool, t)
+  const uncovered = new Set(targetSubsets.map(subset => subset.join(',')))
+
+  // Generate all possible k-combinations from pool (these are our candidates)
+  const allKCombinations = kCombinations(pool, k)
+
+  // Pre-compute which t-subsets each k-combination covers
+  const coverMap = new Map()
+  for (const combo of allKCombinations) {
+    const tSubsetsInCombo = kCombinations(combo, t)
+    coverMap.set(combo.join(','), new Set(tSubsetsInCombo.map(s => s.join(','))))
+  }
+
+  const chosen = []
+
+  // Greedy algorithm: repeatedly pick the combination that covers the most uncovered t-subsets
+  while (uncovered.size > 0) {
+    let bestCombo = null
+    let bestGain = -1
+
+    for (const combo of allKCombinations) {
+      const comboKey = combo.join(',')
+      const coverSet = coverMap.get(comboKey)
+
+      let gain = 0
+      for (const subsetKey of coverSet) {
+        if (uncovered.has(subsetKey)) {
+          gain++
+        }
+      }
+
+      if (gain > bestGain) {
+        bestGain = gain
+        bestCombo = combo
+      }
+    }
+
+    if (bestCombo === null || bestGain === 0) {
+      break
+    }
+
+    chosen.push(bestCombo)
+
+    // Remove all t-subsets covered by this combination
+    const bestKey = bestCombo.join(',')
+    const coverSet = coverMap.get(bestKey)
+    for (const subsetKey of coverSet) {
+      uncovered.delete(subsetKey)
+    }
+  }
+
+  return chosen
+}
+
+
+function Loader({ message = 'Calculating...' }) {
+  return (
+    <div className="flex flex-col items-center justify-center py-12 px-4">
+      <div className="relative w-16 h-16 mb-4">
+        <div className="absolute inset-0 border-4 border-slate-700 rounded-full"></div>
+        <div className="absolute inset-0 border-4 border-transparent border-t-cyan-400 border-r-blue-500 rounded-full animate-spin"></div>
+      </div>
+      <p className="text-slate-300 font-semibold text-sm">{message}</p>
+    </div>
+  )
+}
+
+function NumberChip({ number, selected, onToggle }) {
+  const selectedClasses = selected
+    ? 'bg-gradient-to-br from-cyan-400 via-blue-500 to-violet-600 text-white border-cyan-300 shadow-2xl shadow-blue-500/60 scale-110 ring-4 ring-blue-400/30'
+    : 'bg-gradient-to-br from-slate-800 to-slate-700 border-slate-600 text-slate-300 hover:from-slate-700 hover:to-slate-600 hover:border-blue-500/50 hover:scale-105 hover:shadow-lg hover:shadow-blue-500/20'
+
+  return (
+    <button
+      type="button"
+      className={`relative flex h-12 sm:h-11 w-full items-center justify-center rounded-2xl border-2 font-bold text-base sm:text-sm transition-all duration-300 ease-out active:scale-95 ${selectedClasses}`}
+      onClick={() => onToggle(number, selected)}
+    >
+      {number}
+    </button>
+  )
+}
+
+function StatCard({ label, value }) {
+  return (
+    <div className="relative bg-gradient-to-br from-slate-800/80 to-slate-900/80 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-5 shadow-2xl hover:shadow-blue-500/10 hover:border-blue-500/30 transition-all duration-300 overflow-hidden group">
+      <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-violet-500/5 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+      <div className="relative z-10">
+        <div className="text-slate-400 text-xs font-bold uppercase tracking-widest mb-2">{label}</div>
+        <div className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 text-2xl font-black">{value}</div>
+      </div>
+    </div>
+  )
+}
+
+function PaginationControls({ currentPage, totalPages, rowsPerPage, totalRows, onPageChange, onRowsPerPageChange }) {
+  const pageNumbers = []
+  const maxVisiblePages = 5
+
+  let startPage = Math.max(1, currentPage - Math.floor(maxVisiblePages / 2))
+  let endPage = Math.min(totalPages, startPage + maxVisiblePages - 1)
+
+  if (endPage - startPage < maxVisiblePages - 1) {
+    startPage = Math.max(1, endPage - maxVisiblePages + 1)
+  }
+
+  for (let i = startPage; i <= endPage; i++) {
+    pageNumbers.push(i)
+  }
+
+  if (totalRows === 0) return null
+
+  return (
+    <div className="flex flex-col sm:flex-row items-center justify-between gap-4 py-4 px-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+      {/* Rows per page */}
+      <div className="flex items-center gap-3">
+        <label className="text-slate-300 text-sm font-medium">Rows per page:</label>
+        <select
+          value={rowsPerPage}
+          onChange={(e) => onRowsPerPageChange(Number(e.target.value))}
+          className="px-3 py-2 rounded-lg bg-slate-800 border-2 border-slate-600 text-slate-200 font-semibold focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
+        >
+          <option value={25}>25</option>
+          <option value={50}>50</option>
+          <option value={100}>100</option>
+          <option value={200}>200</option>
+        </select>
+      </div>
+
+      {/* Page info */}
+      <div className="text-slate-300 text-sm font-medium">
+        Showing <span className="text-cyan-400 font-bold">{(currentPage - 1) * rowsPerPage + 1}</span> to{' '}
+        <span className="text-cyan-400 font-bold">{Math.min(currentPage * rowsPerPage, totalRows)}</span> of{' '}
+        <span className="text-cyan-400 font-bold">{totalRows}</span> results
+      </div>
+
+      {/* Page navigation */}
+      <div className="flex items-center gap-2">
+        <button
+          onClick={() => onPageChange(1)}
+          disabled={currentPage === 1}
+          className="px-3 py-2 rounded-lg bg-slate-800 border-2 border-slate-600 text-slate-300 font-bold hover:bg-slate-700 hover:border-blue-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >
+          ««
+        </button>
+        <button
+          onClick={() => onPageChange(currentPage - 1)}
+          disabled={currentPage === 1}
+          className="px-3 py-2 rounded-lg bg-slate-800 border-2 border-slate-600 text-slate-300 font-bold hover:bg-slate-700 hover:border-blue-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >
+          ‹
+        </button>
+
+        {startPage > 1 && (
+          <span className="px-2 text-slate-500">...</span>
+        )}
+
+        {pageNumbers.map((pageNum) => (
+          <button
+            key={pageNum}
+            onClick={() => onPageChange(pageNum)}
+            className={`px-4 py-2 rounded-lg font-bold transition-all ${
+              pageNum === currentPage
+                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white border-2 border-cyan-400 shadow-lg shadow-blue-500/50'
+                : 'bg-slate-800 border-2 border-slate-600 text-slate-300 hover:bg-slate-700 hover:border-blue-500/50'
+            }`}
+          >
+            {pageNum}
+          </button>
+        ))}
+
+        {endPage < totalPages && (
+          <span className="px-2 text-slate-500">...</span>
+        )}
+
+        <button
+          onClick={() => onPageChange(currentPage + 1)}
+          disabled={currentPage === totalPages}
+          className="px-3 py-2 rounded-lg bg-slate-800 border-2 border-slate-600 text-slate-300 font-bold hover:bg-slate-700 hover:border-blue-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >
+          ›
+        </button>
+        <button
+          onClick={() => onPageChange(totalPages)}
+          disabled={currentPage === totalPages}
+          className="px-3 py-2 rounded-lg bg-slate-800 border-2 border-slate-600 text-slate-300 font-bold hover:bg-slate-700 hover:border-blue-500/50 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+        >
+          »»
+        </button>
+      </div>
+    </div>
+  )
+}
 
 function WheelBuilderTab({
   gameConfig,
