@@ -127,87 +127,63 @@ function formatNumbers(numbers) {
   return numbers.join('-')
 }
 
-// Greedy covering design algorithm
-function findMinimumCoverage(pool, k, minMatches) {
-  // Generate all possible k-combinations from the pool
-  const allCombinations = kCombinations(pool, k)
+// Greedy covering algorithm - generates minimal set of k-combinations that cover all t-subsets
+function findMinimumCovering(pool, k, t) {
+  // Generate all t-subsets from pool (these are what we want to cover)
+  const targetSubsets = kCombinations(pool, t)
+  const uncovered = new Set(targetSubsets.map(subset => subset.join(',')))
 
-  // Generate all possible k-combinations that could be drawn from the pool
-  const allPossibleDraws = allCombinations
+  // Generate all possible k-combinations from pool (these are our candidates)
+  const allKCombinations = kCombinations(pool, k)
 
-  const selectedCombinations = []
-  const uncoveredDraws = new Set(allPossibleDraws.map(draw => draw.join(',')))
+  // Pre-compute which t-subsets each k-combination covers
+  const coverMap = new Map()
+  for (const combo of allKCombinations) {
+    const tSubsetsInCombo = kCombinations(combo, t)
+    coverMap.set(combo.join(','), new Set(tSubsetsInCombo.map(s => s.join(','))))
+  }
 
-  // Greedy algorithm: repeatedly pick the combination that covers the most uncovered draws
-  while (uncoveredDraws.size > 0) {
+  const chosen = []
+
+  // Greedy algorithm: repeatedly pick the combination that covers the most uncovered t-subsets
+  while (uncovered.size > 0) {
     let bestCombo = null
-    let bestCoverage = 0
+    let bestGain = -1
 
-    for (const combo of allCombinations) {
-      let coverage = 0
+    for (const combo of allKCombinations) {
+      const comboKey = combo.join(',')
+      const coverSet = coverMap.get(comboKey)
 
-      // Count how many uncovered draws this combo would cover
-      for (const drawKey of uncoveredDraws) {
-        const draw = drawKey.split(',').map(Number)
-        const matches = combo.filter(num => draw.includes(num)).length
-
-        if (matches >= minMatches) {
-          coverage++
+      let gain = 0
+      for (const subsetKey of coverSet) {
+        if (uncovered.has(subsetKey)) {
+          gain++
         }
       }
 
-      if (coverage > bestCoverage) {
-        bestCoverage = coverage
+      if (gain > bestGain) {
+        bestGain = gain
         bestCombo = combo
       }
     }
 
-    if (bestCombo === null) {
+    if (bestCombo === null || bestGain === 0) {
       break
     }
 
-    selectedCombinations.push(bestCombo)
+    chosen.push(bestCombo)
 
-    // Remove all draws covered by this combination
-    const newUncovered = new Set()
-    for (const drawKey of uncoveredDraws) {
-      const draw = drawKey.split(',').map(Number)
-      const matches = bestCombo.filter(num => draw.includes(num)).length
-
-      if (matches < minMatches) {
-        newUncovered.add(drawKey)
-      }
-    }
-
-    uncoveredDraws.clear()
-    newUncovered.forEach(key => uncoveredDraws.add(key))
-  }
-
-  return selectedCombinations
-}
-
-// Check if a set of combinations provides coverage for a given match level
-function checkCoverageLevel(combinations, pool, k, minMatches) {
-  const allPossibleDraws = kCombinations(pool, k)
-
-  for (const draw of allPossibleDraws) {
-    let hasCoverage = false
-
-    for (const combo of combinations) {
-      const matches = combo.filter(num => draw.includes(num)).length
-      if (matches >= minMatches) {
-        hasCoverage = true
-        break
-      }
-    }
-
-    if (!hasCoverage) {
-      return false
+    // Remove all t-subsets covered by this combination
+    const bestKey = bestCombo.join(',')
+    const coverSet = coverMap.get(bestKey)
+    for (const subsetKey of coverSet) {
+      uncovered.delete(subsetKey)
     }
   }
 
-  return true
+  return chosen
 }
+
 
 function NumberChip({ number, selected, onToggle }) {
   const selectedClasses = selected
@@ -341,8 +317,8 @@ function CoverageAnalysisTab({
   NUMBER_RANGE,
   coveragePool,
   setCoveragePool,
-  coverageLevels,
-  setCoverageLevels,
+  coverageGuarantee,
+  setCoverageGuarantee,
   coverageResults,
   setCoverageResults,
   coverageSummary,
@@ -373,10 +349,6 @@ function CoverageAnalysisTab({
 
   const clearCoveragePool = () => setCoveragePool([])
 
-  const toggleCoverageLevel = (level) => {
-    setCoverageLevels((prev) => ({ ...prev, [level]: !prev[level] }))
-  }
-
   const handleGenerateCoverage = () => {
     setCoverageHint('')
     setCoverageSummary([])
@@ -393,79 +365,39 @@ function CoverageAnalysisTab({
       return
     }
 
-    const checkedLevels = Object.entries(coverageLevels)
-      .filter(([, checked]) => checked)
-      .map(([level]) => Number(level))
+    let combinations = []
+    let guaranteeLabel = ''
 
-    if (checkedLevels.length === 0) {
-      setCoverageHint('Please select at least one coverage level.')
-      return
+    if (coverageGuarantee === 'all') {
+      // Generate all possible combinations
+      combinations = kCombinations(coveragePool, pickCount)
+      guaranteeLabel = `All C(${coveragePool.length},${pickCount})`
+    } else {
+      // Generate minimal covering for specific guarantee level
+      const t = Number(coverageGuarantee)
+      combinations = findMinimumCovering(coveragePool, pickCount, t)
+      guaranteeLabel = `${t}/${pickCount} Guarantee (Minimal)`
     }
-
-    // Generate ALL possible combinations from the pool
-    const allCombos = kCombinations(coveragePool, pickCount)
 
     const summary = [
       { label: 'Pool size', value: coveragePool.length.toLocaleString() },
-      { label: `Total ${pickCount}-number combinations`, value: allCombos.length.toLocaleString() },
+      { label: 'Guarantee level', value: guaranteeLabel },
+      { label: 'Combinations needed', value: combinations.length.toLocaleString() },
     ]
 
-    // Calculate breakdown: for each match level, calculate statistics
-    const coverageBreakdown = []
-
-    for (let matchLevel = pickCount; matchLevel >= 2; matchLevel--) {
-      // Calculate: if exactly 'matchLevel' numbers from pool are drawn,
-      // how many of our combinations will have exactly 'matchLevel' matches?
-
-      // Generate all possible scenarios where exactly matchLevel numbers from pool are drawn
-      const poolSubsets = kCombinations(coveragePool, matchLevel)
-
-      let minWinningCombos = Infinity
-
-      // For each scenario, count how many combos win
-      for (const drawnFromPool of poolSubsets) {
-        let winningCount = 0
-
-        for (const combo of allCombos) {
-          // Count matches between combo and drawn pool numbers
-          const matches = combo.filter(num => drawnFromPool.includes(num)).length
-          if (matches === matchLevel) {
-            winningCount++
-          }
-        }
-
-        minWinningCombos = Math.min(minWinningCombos, winningCount)
-      }
-
-      coverageBreakdown.push({
-        level: `${matchLevel}/${pickCount}`,
-        combos: minWinningCombos === Infinity ? 0 : minWinningCombos,
-        type: checkedLevels.includes(matchLevel) ? 'Selected' : 'Info',
+    // Add combinations to results
+    const results = []
+    for (let i = 0; i < combinations.length; i++) {
+      results.push({
+        id: i + 1,
+        mains: formatNumbers(combinations[i]),
+        coverageLevel: guaranteeLabel,
       })
-    }
-
-    summary.push({
-      label: 'Match breakdown',
-      value: 'See table below',
-    })
-
-    // Add all combinations to results
-    const allResults = []
-    let indexCounter = 1
-
-    for (const combo of allCombos) {
-      allResults.push({
-        id: indexCounter,
-        mains: formatNumbers(combo),
-        coverageLevel: 'All combinations',
-        breakdownData: coverageBreakdown,
-      })
-      indexCounter += 1
     }
 
     setCoverageSummary(summary)
-    setCoverageResults(allResults)
-    setCoverageHint(`${allResults.length.toLocaleString()} combinations generated from your pool.`)
+    setCoverageResults(results)
+    setCoverageHint(`${results.length.toLocaleString()} combinations generated from your pool.`)
   }
 
   const handleDownloadCoverage = () => {
@@ -538,33 +470,48 @@ function CoverageAnalysisTab({
 
           <hr className="border-slate-700/50 my-6" />
 
-          {/* Coverage Levels */}
+          {/* Coverage Guarantee */}
           <div className="mb-6">
             <label className="block text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-orange-500 font-black text-base mb-4 uppercase tracking-wider">
-              Coverage Levels
+              Coverage Guarantee
             </label>
             <div className="grid grid-cols-1 gap-3">
+              <label className="flex items-center gap-3 text-sm bg-slate-800/50 border-2 border-slate-600/50 px-4 py-3.5 rounded-xl hover:bg-slate-700/50 hover:border-blue-500/50 cursor-pointer transition-all duration-200 active:scale-95">
+                <input
+                  type="radio"
+                  name="coverage-guarantee"
+                  value="all"
+                  checked={coverageGuarantee === 'all'}
+                  onChange={(e) => setCoverageGuarantee(e.target.value)}
+                  className="w-5 h-5 border-2 border-slate-500 text-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 cursor-pointer transition-all"
+                />
+                <span className="text-slate-200 font-bold">All Combinations</span>
+                <span className="ml-auto text-xs text-slate-400">Show all C(v,{pickCount})</span>
+              </label>
+
               {coverageLevelOptions.map((level) => (
                 <label
                   key={`coverage-${level}`}
                   className="flex items-center gap-3 text-sm bg-slate-800/50 border-2 border-slate-600/50 px-4 py-3.5 rounded-xl hover:bg-slate-700/50 hover:border-blue-500/50 cursor-pointer transition-all duration-200 active:scale-95"
                 >
                   <input
-                    type="checkbox"
-                    checked={coverageLevels[level] || false}
-                    onChange={() => toggleCoverageLevel(level)}
-                    className="w-5 h-5 rounded-lg border-2 border-slate-500 text-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 cursor-pointer transition-all"
+                    type="radio"
+                    name="coverage-guarantee"
+                    value={level.toString()}
+                    checked={coverageGuarantee === level.toString()}
+                    onChange={(e) => setCoverageGuarantee(e.target.value)}
+                    className="w-5 h-5 border-2 border-slate-500 text-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 cursor-pointer transition-all"
                   />
-                  <span className="text-slate-200 font-bold">{level}/{pickCount} Match</span>
-                  <span className="ml-auto text-xs text-slate-400">Guarantee at least {level} matches</span>
+                  <span className="text-slate-200 font-bold">{level}/{pickCount} Guarantee</span>
+                  <span className="ml-auto text-xs text-slate-400">Minimal covering for {level} matches</span>
                 </label>
               ))}
             </div>
             <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
               <p className="text-xs text-slate-300 leading-relaxed">
-                <strong className="text-cyan-400">How it works:</strong> Select coverage levels to find the minimum combinations needed.
-                For example, {pickCount}/{pickCount} coverage guarantees you'll have at least one ticket with all {pickCount} matches,
-                no matter which {pickCount} numbers are drawn from your pool.
+                <strong className="text-cyan-400">How it works:</strong> Select a guarantee level to find the minimum combinations needed.
+                For example, {pickCount}/{pickCount} guarantees at least one ticket with all {pickCount} matches,
+                while 3/{pickCount} guarantees at least one ticket with 3+ matches using fewer combinations.
               </p>
             </div>
           </div>
@@ -616,41 +563,6 @@ function CoverageAnalysisTab({
                 <StatCard key={card.label} label={card.label} value={card.value} />
               ))}
             </div>
-          )}
-
-          {/* Coverage Breakdown Table */}
-          {coverageResults.length > 0 && coverageResults[0]?.breakdownData && (
-            <>
-              <h3 className="text-3xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500">Coverage Breakdown</h3>
-              <div className="border-2 border-slate-700/50 rounded-2xl bg-slate-900/60 backdrop-blur-sm shadow-inner mb-8 overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-800/95 backdrop-blur-md">
-                    <tr className="border-b-2 border-emerald-500/30">
-                      <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Coverage Level</th>
-                      <th className="px-3 sm:px-4 py-4 text-right text-xs font-black uppercase tracking-widest text-slate-300">Combinations</th>
-                      <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Type</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {coverageResults[0].breakdownData.map((breakdown, idx) => (
-                      <tr key={`${breakdown.level}-${idx}`} className={`hover:bg-emerald-500/10 transition-all duration-200 ${idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'}`}>
-                        <td className="px-3 sm:px-4 py-3 text-sm font-bold text-slate-200 border-b border-slate-700/30">{breakdown.level}</td>
-                        <td className="px-3 sm:px-4 py-3 text-sm text-right font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500 border-b border-slate-700/30">{breakdown.combos}</td>
-                        <td className="px-3 sm:px-4 py-3 text-sm border-b border-slate-700/30">
-                          <span className={`inline-block text-xs px-3 py-1.5 rounded-full font-bold shadow-lg ${
-                            breakdown.type === 'Primary'
-                              ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 border border-cyan-400/50 text-cyan-300'
-                              : 'bg-gradient-to-r from-green-500/30 to-emerald-500/30 border border-green-400/50 text-green-300'
-                          }`}>
-                            {breakdown.type}
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
           )}
 
           {/* Results */}
@@ -743,7 +655,7 @@ function App() {
 
   // Coverage Analysis Tab States
   const [coveragePool, setCoveragePool] = useState([])
-  const [coverageLevels, setCoverageLevels] = useState({})
+  const [coverageGuarantee, setCoverageGuarantee] = useState('all') // 'all', '4', '3', '2'
   const [coverageResults, setCoverageResults] = useState([])
   const [coverageSummary, setCoverageSummary] = useState([])
   const [coverageHint, setCoverageHint] = useState('')
@@ -786,7 +698,7 @@ function App() {
 
     // Reset coverage tab
     setCoveragePool([])
-    setCoverageLevels({})
+    setCoverageGuarantee('all')
     setCoverageResults([])
     setCoverageSummary([])
     setCoverageHint('')
@@ -1373,8 +1285,8 @@ function App() {
           NUMBER_RANGE={NUMBER_RANGE}
           coveragePool={coveragePool}
           setCoveragePool={setCoveragePool}
-          coverageLevels={coverageLevels}
-          setCoverageLevels={setCoverageLevels}
+          coverageGuarantee={coverageGuarantee}
+          setCoverageGuarantee={setCoverageGuarantee}
           coverageResults={coverageResults}
           setCoverageResults={setCoverageResults}
           coverageSummary={coverageSummary}
