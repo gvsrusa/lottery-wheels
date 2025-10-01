@@ -1,763 +1,9 @@
 import { useMemo, useState } from 'react'
 import { GAME_CONFIGS } from './utils/constants'
-import { nCk, kCombinations, findMinimumCovering } from './utils/combinatorics'
-import { toCSV, formatNumbers } from './utils/formatters'
-import { Loader } from './components/common/Loader'
-import { NumberChip } from './components/common/NumberChip'
-import { StatCard } from './components/common/StatCard'
-import { PaginationControls } from './components/common/PaginationControls'
-
-
-function WheelBuilderTab({
-  gameConfig,
-  NUMBER_RANGE,
-  wheelPool,
-  setWheelPool,
-  wheelGuarantee,
-  setWheelGuarantee,
-  wheelResults,
-  setWheelResults,
-  wheelSummary,
-  setWheelSummary,
-  wheelHint,
-  setWheelHint,
-  wheelCurrentPage,
-  setWheelCurrentPage,
-  wheelRowsPerPage,
-  setWheelRowsPerPage,
-  wheelLoading,
-  setWheelLoading,
-}) {
-  const { pick: pickCount } = gameConfig.mainNumbers
-  const minPool = gameConfig.poolRange.min
-  const maxPool = gameConfig.poolRange.max
-
-  const toggleWheelPool = (number, currentlySelected) => {
-    setWheelPool((prev) => {
-      if (currentlySelected) {
-        return prev.filter((value) => value !== number)
-      }
-      if (prev.length >= maxPool) {
-        setWheelHint(`Pool is limited to ${maxPool} numbers. Remove one before adding another.`)
-        return prev
-      }
-      return [...prev, number].sort((a, b) => a - b)
-    })
-  }
-
-  const clearWheelPool = () => setWheelPool([])
-
-  const handleGenerateWheel = () => {
-    setWheelHint('')
-    setWheelSummary([])
-    setWheelResults([])
-    setWheelCurrentPage(1)
-
-    if (wheelPool.length < minPool) {
-      setWheelHint(`Select at least ${minPool} numbers in your pool.`)
-      return
-    }
-
-    if (wheelPool.length > maxPool) {
-      setWheelHint(`Pool cannot exceed ${maxPool} numbers.`)
-      return
-    }
-
-    // Start loading
-    setWheelLoading(true)
-
-    // Use setTimeout to allow UI to update with loading state
-    setTimeout(() => {
-      try {
-        // Generate minimal covering wheel for the selected guarantee level
-        const t = Number(wheelGuarantee)
-        const combinations = findMinimumCovering(wheelPool, pickCount, t)
-
-        // Calculate total possible combinations for comparison
-        const totalPossible = nCk(wheelPool.length, pickCount)
-        const coveragePercent = ((combinations.length / totalPossible) * 100).toFixed(2)
-
-        const guaranteeLabels = {
-          '4': `${pickCount}/${pickCount} (match all ${pickCount})`,
-          '3': `${pickCount - 1}+/${pickCount} (match ${pickCount - 1} or more)`,
-          '2': `${pickCount - 2}+/${pickCount} (match ${pickCount - 2} or more)`,
-        }
-
-        const summary = [
-          { label: 'Pool size', value: wheelPool.length.toLocaleString() },
-          { label: 'Guarantee level', value: guaranteeLabels[wheelGuarantee] || `${t}/${pickCount}` },
-          { label: 'Wheel size (tickets)', value: combinations.length.toLocaleString() },
-          { label: 'Total possible combos', value: totalPossible.toLocaleString() },
-          { label: 'Coverage efficiency', value: `${coveragePercent}%` },
-        ]
-
-        // Add combinations to results
-        const results = []
-        for (let i = 0; i < combinations.length; i++) {
-          results.push({
-            id: i + 1,
-            mains: formatNumbers(combinations[i]),
-            guaranteeLevel: guaranteeLabels[wheelGuarantee] || `${t}/${pickCount}`,
-          })
-        }
-
-        setWheelSummary(summary)
-        setWheelResults(results)
-        setWheelHint(
-          `Wheel generated! ${results.length.toLocaleString()} tickets guarantee at least one ticket with ${guaranteeLabels[wheelGuarantee]}.`
-        )
-      } finally {
-        setWheelLoading(false)
-      }
-    }, 100)
-  }
-
-  const handleDownloadWheel = () => {
-    if (wheelResults.length === 0) {
-      setWheelHint('Generate a wheel before downloading.')
-      return
-    }
-
-    const csv = toCSV([
-      ['#', 'Mains', 'Guarantee Level'],
-      ...wheelResults.map((row) => [row.id, row.mains, row.guaranteeLevel]),
-    ])
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = 'lottery-wheel.csv'
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
-  }
-
-  // Pagination
-  const totalPages = Math.ceil(wheelResults.length / wheelRowsPerPage)
-  const startIndex = (wheelCurrentPage - 1) * wheelRowsPerPage
-  const endIndex = startIndex + wheelRowsPerPage
-  const currentRows = wheelResults.slice(startIndex, endIndex)
-
-  return (
-    <main className="relative grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6 p-4 sm:p-6 max-w-[1800px] mx-auto">
-      {/* LEFT: Controls */}
-      <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/50 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-violet-500/5 pointer-events-none"></div>
-        <div className="relative z-10">
-          {/* Pool Selection */}
-          <div className="mb-6">
-            <label className="block text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 font-black text-base mb-4 uppercase tracking-wider">
-              Your Pool <span className="text-slate-400 text-xs normal-case font-medium">(select {minPool}–{maxPool})</span>
-            </label>
-            <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 sm:gap-2.5 mb-4">
-              {NUMBER_RANGE.map((num) => (
-                <NumberChip
-                  key={`wheel-pool-${num}`}
-                  number={num}
-                  selected={wheelPool.includes(num)}
-                  onToggle={toggleWheelPool}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 px-4 py-2 rounded-full text-xs text-slate-300 font-medium">
-                Selected: <strong className="text-blue-400 text-base">{wheelPool.length}</strong>
-              </span>
-              <button
-                onClick={clearWheelPool}
-                className="bg-slate-700/50 border border-slate-600 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-600 hover:border-slate-500 transition-all duration-200"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-
-          <hr className="border-slate-700/50 my-6" />
-
-          {/* Guarantee Level Selection */}
-          <div className="mb-6">
-            <label className="block text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-orange-500 font-black text-base mb-4 uppercase tracking-wider">
-              Guarantee Level
-            </label>
-            <div className="grid grid-cols-1 gap-3">
-              <label className="flex items-center gap-3 text-sm bg-slate-800/50 border-2 border-slate-600/50 px-4 py-3.5 rounded-xl hover:bg-slate-700/50 hover:border-blue-500/50 cursor-pointer transition-all duration-200 active:scale-95">
-                <input
-                  type="radio"
-                  name="wheel-guarantee"
-                  value="4"
-                  checked={wheelGuarantee === '4'}
-                  onChange={(e) => setWheelGuarantee(e.target.value)}
-                  className="w-5 h-5 border-2 border-slate-500 text-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 cursor-pointer transition-all"
-                />
-                <div className="flex-1">
-                  <div className="text-slate-200 font-bold">{pickCount}-if-{pickCount}</div>
-                  <div className="text-xs text-slate-400 mt-0.5">Guarantee at least one ticket matches all {pickCount} numbers</div>
-                </div>
-              </label>
-
-              <label className="flex items-center gap-3 text-sm bg-slate-800/50 border-2 border-slate-600/50 px-4 py-3.5 rounded-xl hover:bg-slate-700/50 hover:border-blue-500/50 cursor-pointer transition-all duration-200 active:scale-95">
-                <input
-                  type="radio"
-                  name="wheel-guarantee"
-                  value="3"
-                  checked={wheelGuarantee === '3'}
-                  onChange={(e) => setWheelGuarantee(e.target.value)}
-                  className="w-5 h-5 border-2 border-slate-500 text-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 cursor-pointer transition-all"
-                />
-                <div className="flex-1">
-                  <div className="text-slate-200 font-bold">{pickCount - 1}-if-{pickCount}</div>
-                  <div className="text-xs text-slate-400 mt-0.5">Guarantee at least one ticket matches {pickCount - 1}+ numbers</div>
-                </div>
-              </label>
-
-              <label className="flex items-center gap-3 text-sm bg-slate-800/50 border-2 border-slate-600/50 px-4 py-3.5 rounded-xl hover:bg-slate-700/50 hover:border-blue-500/50 cursor-pointer transition-all duration-200 active:scale-95">
-                <input
-                  type="radio"
-                  name="wheel-guarantee"
-                  value="2"
-                  checked={wheelGuarantee === '2'}
-                  onChange={(e) => setWheelGuarantee(e.target.value)}
-                  className="w-5 h-5 border-2 border-slate-500 text-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 cursor-pointer transition-all"
-                />
-                <div className="flex-1">
-                  <div className="text-slate-200 font-bold">{pickCount - 2}-if-{pickCount}</div>
-                  <div className="text-xs text-slate-400 mt-0.5">Guarantee at least one ticket matches {pickCount - 2}+ numbers</div>
-                </div>
-              </label>
-            </div>
-
-            <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
-              <p className="text-xs text-slate-300 leading-relaxed">
-                <strong className="text-cyan-400">How it works:</strong> Assuming all {pickCount} drawn numbers come from your pool,
-                this wheel guarantees at least one winning ticket at your selected level. Higher guarantees require more tickets.
-              </p>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex flex-col gap-4 mb-6">
-            <button
-              onClick={handleGenerateWheel}
-              className="relative w-full bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-600 text-white px-6 py-5 rounded-2xl font-black text-lg shadow-2xl shadow-blue-500/50 hover:shadow-3xl hover:shadow-blue-500/70 transition-all duration-300 transform hover:scale-[1.03] active:scale-[0.98] overflow-hidden group"
-            >
-              <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-violet-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
-              <span className="relative z-10 flex items-center justify-center gap-2">
-                ✨ Generate Wheel
-              </span>
-            </button>
-            <button
-              onClick={handleDownloadWheel}
-              className="w-full bg-slate-800/80 border-2 border-slate-600 px-6 py-4 rounded-2xl text-base font-bold hover:bg-slate-700 hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-200"
-            >
-              📥 Download CSV
-            </button>
-          </div>
-
-          {/* Hint */}
-          {wheelHint && (
-            <div className="text-sm rounded-2xl px-5 py-4 border-2 backdrop-blur-sm">
-              {wheelHint.includes('generated') ? (
-                <div className="bg-emerald-500/10 border-emerald-500/50 text-emerald-400 font-bold flex items-center gap-2">
-                  <span className="text-lg">✓</span> {wheelHint}
-                </div>
-              ) : (
-                <div className="bg-slate-700/30 border-slate-600/50 text-slate-300 font-medium">{wheelHint}</div>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* RIGHT: Results */}
-      <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/50 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-blue-500/5 pointer-events-none"></div>
-        <div className="relative z-10">
-          {/* Summary */}
-          <h3 className="text-3xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">Wheel Statistics</h3>
-
-          {wheelLoading ? (
-            <Loader message="Generating optimal wheel..." />
-          ) : wheelSummary.length > 0 && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-              {wheelSummary.map((card) => (
-                <StatCard key={card.label} label={card.label} value={card.value} />
-              ))}
-            </div>
-          )}
-
-          {/* Results */}
-          <h3 className="text-3xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-500">Wheel Combinations</h3>
-
-          {wheelLoading ? (
-            <div className="mt-8">
-              <Loader message="Calculating combinations..." />
-            </div>
-          ) : (
-            <>
-              {/* Pagination Controls - Top */}
-              <PaginationControls
-            currentPage={wheelCurrentPage}
-            totalPages={totalPages}
-            rowsPerPage={wheelRowsPerPage}
-            totalRows={wheelResults.length}
-            onPageChange={setWheelCurrentPage}
-            onRowsPerPageChange={(newRowsPerPage) => {
-              setWheelRowsPerPage(newRowsPerPage)
-              setWheelCurrentPage(1)
-            }}
-          />
-
-          {/* Table */}
-          <div className="border-2 border-slate-700/50 rounded-2xl bg-slate-900/60 backdrop-blur-sm shadow-inner mt-4 overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-800/95 backdrop-blur-md">
-                <tr className="border-b-2 border-blue-500/30">
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">#</th>
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Numbers</th>
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Guarantee</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentRows.length === 0 ? (
-                  <tr>
-                    <td colSpan="3" className="px-4 py-12 text-center text-slate-400 text-sm">
-                      No wheel generated yet. Select your pool and guarantee level, then click Generate Wheel.
-                    </td>
-                  </tr>
-                ) : (
-                  currentRows.map((row, idx) => (
-                    <tr key={row.id} className={`hover:bg-blue-500/10 transition-all duration-200 ${idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'}`}>
-                      <td className="px-3 sm:px-4 py-3 text-sm text-slate-500 border-b border-slate-700/30 font-medium">{row.id}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm font-bold text-slate-200 border-b border-slate-700/30">{row.mains}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm border-b border-slate-700/30">
-                        <span className="inline-block text-xs px-3 py-1.5 bg-gradient-to-r from-green-500/30 to-emerald-500/30 border border-green-400/50 rounded-full text-green-300 font-bold shadow-lg">
-                          {row.guaranteeLevel}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination Controls - Bottom */}
-          {wheelResults.length > 0 && (
-            <div className="mt-4">
-              <PaginationControls
-                currentPage={wheelCurrentPage}
-                totalPages={totalPages}
-                rowsPerPage={wheelRowsPerPage}
-                totalRows={wheelResults.length}
-                onPageChange={setWheelCurrentPage}
-                onRowsPerPageChange={(newRowsPerPage) => {
-                  setWheelRowsPerPage(newRowsPerPage)
-                  setWheelCurrentPage(1)
-                }}
-              />
-            </div>
-          )}
-            </>
-          )}
-        </div>
-      </section>
-    </main>
-  )
-}
-
-function CoverageAnalysisTab({
-  gameConfig,
-  NUMBER_RANGE,
-  coveragePool,
-  setCoveragePool,
-  coverageGuarantee,
-  setCoverageGuarantee,
-  coverageResults,
-  setCoverageResults,
-  coverageSummary,
-  setCoverageSummary,
-  coverageHint,
-  setCoverageHint,
-  coverageCurrentPage,
-  setCoverageCurrentPage,
-  coverageRowsPerPage,
-  setCoverageRowsPerPage,
-  coverageLoading,
-  setCoverageLoading,
-  coverageBreakdown,
-  setCoverageBreakdown,
-}) {
-  const { pick: pickCount } = gameConfig.mainNumbers
-  const minPool = gameConfig.poolRange.min
-  const maxPool = gameConfig.poolRange.max
-
-  const toggleCoveragePool = (number, currentlySelected) => {
-    setCoveragePool((prev) => {
-      if (currentlySelected) {
-        return prev.filter((value) => value !== number)
-      }
-      if (prev.length >= maxPool) {
-        setCoverageHint(`Pool is limited to ${maxPool} numbers. Remove one before adding another.`)
-        return prev
-      }
-      return [...prev, number].sort((a, b) => a - b)
-    })
-  }
-
-  const clearCoveragePool = () => setCoveragePool([])
-
-  const handleGenerateCoverage = () => {
-    setCoverageHint('')
-    setCoverageSummary([])
-    setCoverageResults([])
-    setCoverageBreakdown([])
-    setCoverageCurrentPage(1)
-
-    if (coveragePool.length < minPool) {
-      setCoverageHint(`Select at least ${minPool} numbers in your pool.`)
-      return
-    }
-
-    if (coveragePool.length > maxPool) {
-      setCoverageHint(`Pool cannot exceed ${maxPool} numbers.`)
-      return
-    }
-
-    // Start loading
-    setCoverageLoading(true)
-
-    // Use setTimeout to allow UI to update with loading state
-    setTimeout(() => {
-      try {
-        // Generate minimal covering for specific guarantee level
-        const t = Number(coverageGuarantee)
-        const combinations = findMinimumCovering(coveragePool, pickCount, t)
-
-        // Calculate total possible combinations and theoretical coverage
-        const totalPossible = nCk(coveragePool.length, pickCount)
-        const totalSubsets = nCk(coveragePool.length, t)
-        const coveragePercent = ((combinations.length / totalPossible) * 100).toFixed(2)
-
-        const guaranteeLabels = {
-          '4': `${pickCount}/${pickCount} (all ${pickCount} numbers)`,
-          '3': `${pickCount - 1}+/${pickCount} (${pickCount - 1} or more)`,
-          '2': `${pickCount - 2}+/${pickCount} (${pickCount - 2} or more)`,
-        }
-
-        const summary = [
-          { label: 'Pool size', value: coveragePool.length.toLocaleString() },
-          { label: 'Guarantee level', value: guaranteeLabels[coverageGuarantee] || `${t}/${pickCount}` },
-          { label: 'Minimum combinations needed', value: combinations.length.toLocaleString() },
-          { label: 'Total possible combinations', value: totalPossible.toLocaleString() },
-          { label: 'Efficiency', value: `${coveragePercent}%` },
-        ]
-
-        // Create detailed breakdown
-        const breakdown = [
-          {
-            label: `Total ${t}-subsets to cover`,
-            value: totalSubsets.toLocaleString(),
-            description: `All possible ${t}-number combinations from your pool of ${coveragePool.length}`
-          },
-          {
-            label: `${t}-subsets per ${pickCount}-combination`,
-            value: nCk(pickCount, t).toLocaleString(),
-            description: `Each ${pickCount}-number ticket covers ${nCk(pickCount, t)} different ${t}-subsets`
-          },
-          {
-            label: 'Coverage guarantee',
-            value: '100%',
-            description: `No matter which ${pickCount} numbers are drawn from your pool, at least one ticket will match ${t}+ numbers`
-          },
-        ]
-
-        setCoverageBreakdown(breakdown)
-
-        // Add combinations to results
-        const results = []
-        for (let i = 0; i < combinations.length; i++) {
-          results.push({
-            id: i + 1,
-            mains: formatNumbers(combinations[i]),
-            coverageLevel: guaranteeLabels[coverageGuarantee] || `${t}/${pickCount}`,
-          })
-        }
-
-        setCoverageSummary(summary)
-        setCoverageResults(results)
-        setCoverageHint(`${results.length.toLocaleString()} combinations guarantee ${guaranteeLabels[coverageGuarantee]}.`)
-      } finally {
-        setCoverageLoading(false)
-      }
-    }, 100)
-  }
-
-  const handleDownloadCoverage = () => {
-    if (coverageResults.length === 0) {
-      setCoverageHint('Generate coverage combinations before downloading.')
-      return
-    }
-
-    const csv = toCSV([
-      ['#', 'Mains', 'Coverage Level'],
-      ...coverageResults.map((row) => [row.id, row.mains, row.coverageLevel]),
-    ])
-
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const anchor = document.createElement('a')
-    anchor.href = url
-    anchor.download = 'coverage-combinations.csv'
-    document.body.appendChild(anchor)
-    anchor.click()
-    anchor.remove()
-    URL.revokeObjectURL(url)
-  }
-
-  // Pagination
-  const totalPages = Math.ceil(coverageResults.length / coverageRowsPerPage)
-  const startIndex = (coverageCurrentPage - 1) * coverageRowsPerPage
-  const endIndex = startIndex + coverageRowsPerPage
-  const currentRows = coverageResults.slice(startIndex, endIndex)
-
-  // Generate coverage level options dynamically
-  const coverageLevelOptions = []
-  for (let i = pickCount; i >= 2; i--) {
-    coverageLevelOptions.push(i)
-  }
-
-  return (
-    <main className="relative grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6 p-4 sm:p-6 max-w-[1800px] mx-auto">
-      {/* LEFT: Controls */}
-      <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/50 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-violet-500/5 pointer-events-none"></div>
-        <div className="relative z-10">
-          {/* Pool Selection */}
-          <div className="mb-6">
-            <label className="block text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 font-black text-base mb-4 uppercase tracking-wider">
-              Your Pool <span className="text-slate-400 text-xs normal-case font-medium">(select {minPool}–{maxPool})</span>
-            </label>
-            <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 sm:gap-2.5 mb-4">
-              {NUMBER_RANGE.map((num) => (
-                <NumberChip
-                  key={`coverage-pool-${num}`}
-                  number={num}
-                  selected={coveragePool.includes(num)}
-                  onToggle={toggleCoveragePool}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 px-4 py-2 rounded-full text-xs text-slate-300 font-medium">
-                Selected: <strong className="text-blue-400 text-base">{coveragePool.length}</strong>
-              </span>
-              <button
-                onClick={clearCoveragePool}
-                className="bg-slate-700/50 border border-slate-600 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-600 hover:border-slate-500 transition-all duration-200"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-
-          <hr className="border-slate-700/50 my-6" />
-
-          {/* Coverage Guarantee */}
-          <div className="mb-6">
-            <label className="block text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-orange-500 font-black text-base mb-4 uppercase tracking-wider">
-              Coverage Guarantee
-            </label>
-            <div className="grid grid-cols-1 gap-3">
-              {coverageLevelOptions.map((level) => (
-                <label
-                  key={`coverage-${level}`}
-                  className="flex items-center gap-3 text-sm bg-slate-800/50 border-2 border-slate-600/50 px-4 py-3.5 rounded-xl hover:bg-slate-700/50 hover:border-blue-500/50 cursor-pointer transition-all duration-200 active:scale-95"
-                >
-                  <input
-                    type="radio"
-                    name="coverage-guarantee"
-                    value={level.toString()}
-                    checked={coverageGuarantee === level.toString()}
-                    onChange={(e) => setCoverageGuarantee(e.target.value)}
-                    className="w-5 h-5 border-2 border-slate-500 text-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 cursor-pointer transition-all"
-                  />
-                  <div className="flex-1">
-                    <div className="text-slate-200 font-bold">{level}-if-{pickCount}</div>
-                    <div className="text-xs text-slate-400 mt-0.5">Guarantee at least one ticket matches {level}+ numbers</div>
-                  </div>
-                </label>
-              ))}
-            </div>
-            <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/30 rounded-xl">
-              <p className="text-xs text-slate-300 leading-relaxed">
-                <strong className="text-cyan-400">How it works:</strong> Assuming all {pickCount} drawn numbers come from your pool (but you don't know which {pickCount}),
-                this calculates the minimum combinations needed to guarantee at least one ticket with your selected match level.
-                Higher guarantees require more combinations.
-              </p>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex flex-col gap-4 mb-6">
-            <button
-              onClick={handleGenerateCoverage}
-              className="relative w-full bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-600 text-white px-6 py-5 rounded-2xl font-black text-lg shadow-2xl shadow-blue-500/50 hover:shadow-3xl hover:shadow-blue-500/70 transition-all duration-300 transform hover:scale-[1.03] active:scale-[0.98] overflow-hidden group"
-            >
-              <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-violet-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
-              <span className="relative z-10 flex items-center justify-center gap-2">
-                ✨ Calculate Coverage
-              </span>
-            </button>
-            <button
-              onClick={handleDownloadCoverage}
-              className="w-full bg-slate-800/80 border-2 border-slate-600 px-6 py-4 rounded-2xl text-base font-bold hover:bg-slate-700 hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-200"
-            >
-              📥 Download CSV
-            </button>
-          </div>
-
-          {/* Hint */}
-          {coverageHint && (
-            <div className="text-sm rounded-2xl px-5 py-4 border-2 backdrop-blur-sm">
-              {coverageHint.includes('generated') ? (
-                <div className="bg-emerald-500/10 border-emerald-500/50 text-emerald-400 font-bold flex items-center gap-2">
-                  <span className="text-lg">✓</span> {coverageHint}
-                </div>
-              ) : (
-                <div className="bg-slate-700/30 border-slate-600/50 text-slate-300 font-medium">{coverageHint}</div>
-              )}
-            </div>
-          )}
-        </div>
-      </section>
-
-      {/* RIGHT: Results */}
-      <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/50 overflow-hidden">
-        <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-blue-500/5 pointer-events-none"></div>
-        <div className="relative z-10">
-          {/* Summary */}
-          <h3 className="text-3xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">Summary</h3>
-
-          {coverageLoading ? (
-            <Loader message="Calculating coverage..." />
-          ) : coverageSummary.length > 0 && (
-            <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-                {coverageSummary.map((card) => (
-                  <StatCard key={card.label} label={card.label} value={card.value} />
-                ))}
-              </div>
-
-              {/* Coverage Breakdown */}
-              {coverageBreakdown.length > 0 && (
-                <>
-                  <h3 className="text-2xl font-black mb-4 text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500">Coverage Breakdown</h3>
-                  <div className="border-2 border-emerald-700/50 rounded-2xl bg-emerald-900/20 backdrop-blur-sm shadow-inner mb-8 overflow-hidden">
-                    <table className="w-full">
-                      <thead className="bg-emerald-800/30 backdrop-blur-md">
-                        <tr className="border-b-2 border-emerald-500/30">
-                          <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-emerald-300">Metric</th>
-                          <th className="px-4 py-4 text-right text-xs font-black uppercase tracking-widest text-emerald-300">Value</th>
-                          <th className="px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-emerald-300">Description</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {coverageBreakdown.map((item, idx) => (
-                          <tr key={idx} className={`hover:bg-emerald-500/10 transition-all duration-200 ${idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'}`}>
-                            <td className="px-4 py-3 text-sm font-bold text-emerald-200 border-b border-emerald-700/30">{item.label}</td>
-                            <td className="px-4 py-3 text-sm text-right font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500 border-b border-emerald-700/30">{item.value}</td>
-                            <td className="px-4 py-3 text-xs text-slate-300 border-b border-emerald-700/30">{item.description}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </>
-              )}
-            </>
-          )}
-
-          {/* Results */}
-          <h3 className="text-3xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-500">Coverage Combinations</h3>
-
-          {coverageLoading ? (
-            <div className="mt-8">
-              <Loader message="Generating combinations..." />
-            </div>
-          ) : (
-            <>
-              {/* Pagination Controls - Top */}
-              <PaginationControls
-                currentPage={coverageCurrentPage}
-                totalPages={totalPages}
-                rowsPerPage={coverageRowsPerPage}
-                totalRows={coverageResults.length}
-                onPageChange={setCoverageCurrentPage}
-                onRowsPerPageChange={(newRowsPerPage) => {
-                  setCoverageRowsPerPage(newRowsPerPage)
-                  setCoverageCurrentPage(1)
-                }}
-              />
-
-          {/* Table */}
-          <div className="border-2 border-slate-700/50 rounded-2xl bg-slate-900/60 backdrop-blur-sm shadow-inner mt-4 overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-800/95 backdrop-blur-md">
-                <tr className="border-b-2 border-blue-500/30">
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">#</th>
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Mains</th>
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Coverage Level</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentRows.length === 0 ? (
-                  <tr>
-                    <td colSpan="3" className="px-4 py-12 text-center text-slate-400 text-sm">
-                      No coverage combinations to display. Calculate coverage to see results here.
-                    </td>
-                  </tr>
-                ) : (
-                  currentRows.map((row, idx) => (
-                    <tr key={row.id} className={`hover:bg-blue-500/10 transition-all duration-200 ${idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'}`}>
-                      <td className="px-3 sm:px-4 py-3 text-sm text-slate-500 border-b border-slate-700/30 font-medium">{row.id}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm font-bold text-slate-200 border-b border-slate-700/30">{row.mains}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm border-b border-slate-700/30">
-                        <span className="inline-block text-xs px-3 py-1.5 bg-gradient-to-r from-green-500/30 to-emerald-500/30 border border-green-400/50 rounded-full text-green-300 font-bold shadow-lg">
-                          {row.coverageLevel}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination Controls - Bottom */}
-          {coverageResults.length > 0 && (
-            <div className="mt-4">
-              <PaginationControls
-                currentPage={coverageCurrentPage}
-                totalPages={totalPages}
-                rowsPerPage={coverageRowsPerPage}
-                totalRows={coverageResults.length}
-                onPageChange={setCoverageCurrentPage}
-                onRowsPerPageChange={(newRowsPerPage) => {
-                  setCoverageRowsPerPage(newRowsPerPage)
-                  setCoverageCurrentPage(1)
-                }}
-              />
-            </div>
-          )}
-            </>
-          )}
-        </div>
-      </section>
-    </main>
-  )
-}
+import { nCk, kCombinations } from './utils/combinatorics'
+import { toCSV } from './utils/formatters'
+import { WheelBuilderTab } from './components/tabs/WheelBuilderTab'
+import { CoverageAnalysisTab } from './components/tabs/CoverageAnalysisTab'
 
 function App() {
   const [activeTab, setActiveTab] = useState('wheel-builder')
@@ -862,75 +108,65 @@ function App() {
     })
   }
 
-  const toggleBonus = (number, currentlySelected) => {
+  const clearPool = () => setPool([])
+
+  const toggleBonusCandidate = (number, currentlySelected) => {
     setBonusCandidates((prev) => {
       if (currentlySelected) {
         return prev.filter((value) => value !== number)
       }
       if (prev.length >= gameConfig.bonusCandidatesMax) {
-        setHint(`Bonus pool is limited to ${gameConfig.bonusCandidatesMax} candidates.`)
+        setHint(`Bonus candidates are limited to ${gameConfig.bonusCandidatesMax}. Remove one before adding another.`)
         return prev
       }
       return [...prev, number].sort((a, b) => a - b)
     })
   }
+
+  const clearBonusCandidates = () => setBonusCandidates([])
 
   const toggleDrawn = (number, currentlySelected) => {
     setDrawn((prev) => {
       if (currentlySelected) {
-        const next = prev.filter((value) => value !== number)
-        return next
+        return prev.filter((value) => value !== number)
       }
       if (prev.length >= gameConfig.mainNumbers.pick) {
-        setHint(`Drawn mains are capped at ${gameConfig.mainNumbers.pick} numbers.`)
+        setHint(`You can only select ${gameConfig.mainNumbers.pick} drawn numbers.`)
         return prev
       }
       return [...prev, number].sort((a, b) => a - b)
     })
   }
 
-  const clearPool = () => setPool([])
-  const clearBonus = () => setBonusCandidates([])
-  const clearDraw = () => setDrawn([])
-
-  const toggleTier = (tierId) => {
-    setTiers((prev) => ({ ...prev, [tierId]: !prev[tierId] }))
+  const clearDrawn = () => {
+    setDrawn([])
+    setDrawnBonus('')
   }
 
   const handleGenerate = () => {
-    const trimmedBonus = drawnBonus.trim()
-    const parsedDrawBonus = trimmedBonus === '' ? null : Number(trimmedBonus)
-
     setHint('')
     setSummaryCards([])
     setRows([])
-    setCurrentPage(1) // Reset to first page
+    setCurrentPage(1)
 
-    const { pick: pickCount } = gameConfig.mainNumbers
-    const minPool = gameConfig.poolRange.min
-    const maxPool = gameConfig.poolRange.max
-
-    if (pool.length < minPool) {
-      setHint(`Select at least ${minPool} numbers in your pool.`)
+    if (pool.length < gameConfig.poolRange.min) {
+      setHint(`Select at least ${gameConfig.poolRange.min} numbers in your pool.`)
       return
     }
 
-    if (pool.length > maxPool) {
-      setHint(`Pool cannot exceed ${maxPool} numbers.`)
+    if (pool.length > gameConfig.poolRange.max) {
+      setHint(`Pool cannot exceed ${gameConfig.poolRange.max} numbers.`)
       return
     }
 
-    if (drawn.length !== pickCount) {
-      setHint(`Choose exactly ${pickCount} drawn mains.`)
+    if (drawn.length !== gameConfig.mainNumbers.pick) {
+      setHint(`Please select exactly ${gameConfig.mainNumbers.pick} drawn main numbers.`)
       return
     }
 
-    if (gameConfig.hasBonus && trimmedBonus !== '') {
-      const bonusMax = gameConfig.bonusNumbers.max
-      if (Number.isNaN(parsedDrawBonus) || parsedDrawBonus < 1 || parsedDrawBonus > bonusMax) {
-        setHint(`Drawn bonus must be a number between 1 and ${bonusMax} or left blank.`)
-        return
-      }
+    if (gameConfig.hasBonus && bonusCandidates.length > 0 && !drawnBonus) {
+      setHint('Specify a drawn bonus number or clear bonus candidates.')
+      return
     }
 
     // Start loading
@@ -939,114 +175,96 @@ function App() {
     // Use setTimeout to allow UI to update with loading state
     setTimeout(() => {
       try {
+        const { pick } = gameConfig.mainNumbers
+        const allMainCombinations = kCombinations(pool, pick)
+        const bonusOptions = bonusCandidates.length > 0 ? bonusCandidates : [null]
 
-    const K = poolsOverlap.length
-    const totalPerBonus = nCk(pool.length, pickCount)
+        const expandedCombinations = []
+        for (const mains of allMainCombinations) {
+          for (const bonus of bonusOptions) {
+            expandedCombinations.push({
+              mains,
+              bonus,
+            })
+          }
+        }
 
-    // Calculate theoretical matches for different tiers
-    const matchTheory = {}
-    for (let i = pickCount; i >= 2; i--) {
-      const matched = nCk(K, i)
-      const unmatched = i < pickCount ? nCk(pool.length - K, pickCount - i) : 1
-      matchTheory[i] = matched * unmatched
-    }
-    const bonusPoolCount = bonusCandidates.length
+        const selectedTiers = Object.keys(tiers).filter((tierId) => tiers[tierId])
+        const bonusMatch = drawnBonus && bonusCandidates.includes(Number(drawnBonus))
 
-    const summary = [
-      { label: 'Pool size', value: pool.length.toLocaleString() },
-      { label: 'Drawn numbers', value: formatNumbers(drawn) },
-      { label: 'Matching numbers (K)', value: K.toLocaleString() },
-      { label: `Main combos (${pickCount}-number)`, value: totalPerBonus.toLocaleString() },
-    ]
-
-    // Add match theory cards dynamically
-    for (let i = pickCount; i >= Math.max(2, pickCount - 3); i--) {
-      if (matchTheory[i] !== undefined) {
-        summary.push({
-          label: `${i}/${pickCount} (theory)`,
-          value: matchTheory[i].toLocaleString(),
+        const results = expandedCombinations.map((combo, index) => {
+          const mainMatches = combo.mains.filter((n) => drawn.includes(n)).length
+          const hasBonus = combo.bonus !== null && combo.bonus === Number(drawnBonus)
+          const tier = matchesToTier(mainMatches, hasBonus, gameConfig)
+          return {
+            id: index + 1,
+            mains: combo.mains.join('-'),
+            bonus: combo.bonus !== null ? combo.bonus.toString() : '—',
+            match: `${mainMatches}/${pick}`,
+            bonusHit: combo.bonus !== null ? (hasBonus ? 'Yes' : 'No') : '—',
+            tier: tier || '—',
+          }
         })
-      }
-    }
 
-    if (bonusPoolCount > 0) {
-      const bonusHit = parsedDrawBonus != null && bonusCandidates.includes(parsedDrawBonus)
-      summary.push({ label: 'Bonus candidates', value: bonusCandidates.join(', ') || '—' })
-      summary.push({ label: 'Drawn bonus', value: parsedDrawBonus ?? '—' })
-      summary.push({ label: 'Bonus hit?', value: bonusHit ? 'Yes' : 'No' })
-      summary.push({
-        label: 'Total tickets',
-        value: (totalPerBonus * bonusPoolCount).toLocaleString(),
-      })
-    }
+        const filteredResults = results.filter((row) => {
+          if (row.tier === '—') return false
+          return selectedTiers.includes(row.tier.split(' ')[0])
+        })
 
-    const mainsTickets = kCombinations(pool, pickCount)
-    const bonuses = gameConfig.hasBonus && bonusPoolCount > 0 ? bonusCandidates : [null]
-    const bonusLogicActive = gameConfig.hasBonus && parsedDrawBonus != null && bonusPoolCount > 0
+        const matchingSummary = summarizeResults(filteredResults, allMainCombinations.length, bonusOptions.length, drawn, drawnBonus, bonusMatch, gameConfig)
+        setSummaryCards(matchingSummary)
+        setRows(filteredResults)
 
-    const activeRows = []
-    let indexCounter = 1
-    const TIER_LABEL = Object.fromEntries(gameConfig.tiers.map((tier) => [tier.id, tier.label]))
-
-    for (const ticket of mainsTickets) {
-      const matchedMains = ticket.filter((value) => drawn.includes(value)).length
-
-      for (const bonus of bonuses) {
-        const bonusHit = bonusLogicActive && bonus === parsedDrawBonus
-        let tierKey = null
-
-        // Dynamic tier key generation based on matches
-        if (gameConfig.hasBonus) {
-          tierKey = bonusHit ? `${matchedMains}of${pickCount}b` : `${matchedMains}of${pickCount}`
+        if (filteredResults.length === 0) {
+          setHint('No combinations match the selected prize tiers.')
         } else {
-          tierKey = `${matchedMains}of${pickCount}`
+          setHint(`${filteredResults.length.toLocaleString()} combinations generated!`)
         }
-
-        if (!tiers[tierKey]) {
-          continue
-        }
-
-        activeRows.push({
-          id: indexCounter,
-          mains: formatNumbers(ticket),
-          bonus: bonus ?? '—',
-          match: matchedMains,
-          bonusHit: bonusLogicActive ? (bonusHit ? 'Yes' : 'No') : '—',
-          tier: TIER_LABEL[tierKey] || tierKey,
-        })
-        indexCounter += 1
-      }
-    }
-
-    // Add filtered results count to summary
-    summary.splice(4, 0, {
-      label: 'Filtered results',
-      value: activeRows.length.toLocaleString(),
-      tooltip: 'Combinations matching your selected tiers (shown in table below)'
-    })
-
-    if (activeRows.length > 12000) {
-      setHint(`Large output (${activeRows.length.toLocaleString()} rows). Consider narrowing tiers or reducing pool size.`)
-    } else {
-      setHint(`${activeRows.length.toLocaleString()} rows generated.`)
-    }
-
-    setSummaryCards(summary)
-    setRows(activeRows)
       } finally {
         setLoading(false)
       }
     }, 100)
   }
 
+  function matchesToTier(mainMatches, hasBonus, gameConfig) {
+    const { pick } = gameConfig.mainNumbers
+    if (mainMatches === pick && hasBonus) return '4of4b 4/4 + Bonus'
+    if (mainMatches === pick) return '4of4 4/4'
+    if (mainMatches === pick - 1 && hasBonus) return '3of4b 3/4 + Bonus'
+    if (mainMatches === pick - 1) return '3of4 3/4'
+    if (mainMatches === pick - 2 && hasBonus) return '2of4b 2/4 + Bonus'
+    if (mainMatches === pick - 2) return '2of4 2/4'
+    return null
+  }
+
+  function summarizeResults(filteredResults, totalMainCombos, bonusOptionsLength, drawn, drawnBonus, bonusMatch, gameConfig) {
+    const overlapCount = poolsOverlap.length
+    const noOverlapCount = pool.length - overlapCount
+
+    const summary = [
+      { label: 'Pool size', value: pool.length.toLocaleString() },
+      { label: 'Overlap with drawn', value: `${overlapCount}/${gameConfig.mainNumbers.pick}` },
+      { label: 'Main combinations', value: totalMainCombos.toLocaleString() },
+    ]
+
+    if (bonusOptionsLength > 1) {
+      summary.push({ label: 'Bonus options', value: bonusOptionsLength.toLocaleString() })
+      summary.push({ label: 'Total combinations', value: (totalMainCombos * bonusOptionsLength).toLocaleString() })
+    }
+
+    summary.push({ label: 'Matching results', value: filteredResults.length.toLocaleString() })
+
+    return summary
+  }
+
   const handleDownload = () => {
     if (rows.length === 0) {
-      setHint('Generate combinations before downloading a CSV.')
+      setHint('Generate results before downloading.')
       return
     }
 
     const csv = toCSV([
-      ['#', 'Mains', 'Bonus', 'Match (mains)', 'Bonus hit', 'Tier'],
+      ['#', 'Mains', 'Bonus', 'Match', 'Bonus Hit', 'Tier'],
       ...rows.map((row) => [row.id, row.mains, row.bonus, row.match, row.bonusHit, row.tier]),
     ])
 
@@ -1054,7 +272,7 @@ function App() {
     const url = URL.createObjectURL(blob)
     const anchor = document.createElement('a')
     anchor.href = url
-    anchor.download = 'two-step-combinations.csv'
+    anchor.download = 'lottery-combinations.csv'
     document.body.appendChild(anchor)
     anchor.click()
     anchor.remove()
@@ -1062,73 +280,54 @@ function App() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-blue-950/20 to-slate-950 text-slate-100">
-      {/* Animated background gradient overlay */}
-      <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-violet-900/20 pointer-events-none"></div>
-
+    <div className="min-h-screen relative bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 text-slate-100 overflow-x-hidden">
       {/* Header */}
-      <header className="relative border-b border-slate-800/50 bg-slate-900/60 backdrop-blur-xl px-6 py-6 sm:py-8 shadow-2xl">
-        <div className="max-w-[1800px] mx-auto">
-          <h1 className="text-3xl sm:text-5xl font-black tracking-tight bg-gradient-to-r from-cyan-400 via-blue-500 to-violet-500 bg-clip-text text-transparent drop-shadow-2xl">
-            {gameConfig.name}
-          </h1>
-          <p className="text-slate-300 text-sm sm:text-lg font-medium mt-2 flex items-center gap-2">
-            <span className="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-            {gameConfig.description}
-          </p>
-
-          {/* Game Selector */}
-          <div className="mt-6 flex flex-wrap gap-2">
-            {Object.entries(GAME_CONFIGS).map(([key, config]) => (
-              <button
-                key={key}
-                onClick={() => handleGameChange(key)}
-                className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 ${
-                  selectedGame === key
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-blue-500/50 scale-105'
-                    : 'bg-slate-800/80 text-slate-300 border-2 border-slate-700 hover:border-blue-500/50 hover:bg-slate-700'
-                }`}
-              >
-                {config.name}
-              </button>
-            ))}
-          </div>
-
-          {/* Tab Navigation */}
-          <div className="mt-6 flex gap-2 border-b border-slate-700/50">
-            <button
-              onClick={() => setActiveTab('wheel-builder')}
-              className={`px-6 py-3 font-bold text-sm transition-all duration-200 border-b-4 ${
-                activeTab === 'wheel-builder'
-                  ? 'border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-300'
-              }`}
+      <header className="sticky top-0 z-50 backdrop-blur-2xl bg-slate-900/90 border-b border-slate-700/50 shadow-2xl shadow-black/50">
+        <div className="max-w-[1800px] mx-auto px-4 sm:px-6 py-4">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+            <h1 className="text-3xl sm:text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-blue-500 to-violet-600 drop-shadow-2xl tracking-tight">
+              🎰 Lottery Wheels
+            </h1>
+            <select
+              value={selectedGame}
+              onChange={(e) => handleGameChange(e.target.value)}
+              className="bg-slate-800/80 border-2 border-slate-600 px-4 py-3 rounded-xl text-base font-semibold focus:outline-none focus:ring-4 focus:ring-blue-500/50 hover:bg-slate-700 transition-all cursor-pointer shadow-lg"
             >
-              Wheel Builder
-            </button>
-            <button
-              onClick={() => setActiveTab('coverage-analysis')}
-              className={`px-6 py-3 font-bold text-sm transition-all duration-200 border-b-4 ${
-                activeTab === 'coverage-analysis'
-                  ? 'border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              Coverage Analysis
-            </button>
-            <button
-              onClick={() => setActiveTab('game-configs')}
-              className={`px-6 py-3 font-bold text-sm transition-all duration-200 border-b-4 ${
-                activeTab === 'game-configs'
-                  ? 'border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              Game Configs
-            </button>
+              {Object.entries(GAME_CONFIGS).map(([key, config]) => (
+                <option key={key} value={key}>
+                  {config.name}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
       </header>
+
+      {/* Tab Navigation */}
+      <div className="max-w-[1800px] mx-auto px-4 sm:px-6 mt-6">
+        <div className="flex gap-2 border-b-2 border-slate-700/50">
+          <button
+            onClick={() => setActiveTab('wheel-builder')}
+            className={`px-6 py-3 font-bold text-sm transition-all duration-200 border-b-2 ${
+              activeTab === 'wheel-builder'
+                ? 'text-cyan-400 border-cyan-400'
+                : 'text-slate-400 border-transparent hover:text-slate-200'
+            }`}
+          >
+            Wheel Builder
+          </button>
+          <button
+            onClick={() => setActiveTab('coverage-analysis')}
+            className={`px-6 py-3 font-bold text-sm transition-all duration-200 border-b-2 ${
+              activeTab === 'coverage-analysis'
+                ? 'text-cyan-400 border-cyan-400'
+                : 'text-slate-400 border-transparent hover:text-slate-200'
+            }`}
+          >
+            Coverage Analysis
+          </button>
+        </div>
+      </div>
 
       {/* Wheel Builder Tab */}
       {activeTab === 'wheel-builder' && (
@@ -1152,329 +351,6 @@ function App() {
           wheelLoading={wheelLoading}
           setWheelLoading={setWheelLoading}
         />
-      )}
-
-      {/* Game Configs Tab */}
-      {activeTab === 'game-configs' && (
-      <main className="relative grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6 p-4 sm:p-6 max-w-[1800px] mx-auto">
-        {/* LEFT: Controls */}
-        <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/50 overflow-hidden">
-          {/* Subtle gradient overlay */}
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-violet-500/5 pointer-events-none"></div>
-          <div className="relative z-10">
-          {/* Game Range */}
-          <div className="flex justify-between items-center mb-6">
-            <label className="text-slate-200 font-bold text-sm uppercase tracking-wide">Game Range</label>
-            <span className="inline-flex items-center gap-2 bg-slate-700/50 border border-slate-600 px-4 py-2 rounded-full text-xs text-slate-300 font-medium">
-              Mains: {gameConfig.mainNumbers.min}–{gameConfig.mainNumbers.max}
-              {gameConfig.hasBonus && ` · Bonus: ${gameConfig.bonusNumbers.min}–${gameConfig.bonusNumbers.max}`}
-            </span>
-          </div>
-
-          {/* Pool Selection */}
-          <div className="mb-6">
-            <label className="block text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 font-black text-base mb-4 uppercase tracking-wider">
-              Your Pool <span className="text-slate-400 text-xs normal-case font-medium">(select {gameConfig.poolRange.min}–{gameConfig.poolRange.max})</span>
-            </label>
-            <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 sm:gap-2.5 mb-4">
-              {NUMBER_RANGE.map((num) => (
-                <NumberChip
-                  key={`pool-${num}`}
-                  number={num}
-                  selected={pool.includes(num)}
-                  onToggle={togglePool}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-2 bg-gradient-to-r from-blue-500/10 to-purple-500/10 border border-blue-500/30 px-4 py-2 rounded-full text-xs text-slate-300 font-medium">
-                Selected: <strong className="text-blue-400 text-base">{pool.length}</strong>
-              </span>
-              <button
-                onClick={clearPool}
-                className="bg-slate-700/50 border border-slate-600 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-600 hover:border-slate-500 transition-all duration-200"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-
-          {/* Bonus Selection - Only show if game has bonus */}
-          {gameConfig.hasBonus && (
-            <>
-              <div className="mb-6">
-                <label className="block text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-500 font-black text-base mb-4 uppercase tracking-wider">
-                  Bonus Candidates <span className="text-slate-400 text-xs normal-case font-medium">(optional, 0–{gameConfig.bonusCandidatesMax})</span>
-                </label>
-                <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 sm:gap-2.5 mb-4">
-                  {BONUS_RANGE.map((num) => (
-                    <NumberChip
-                      key={`bonus-${num}`}
-                      number={num}
-                      selected={bonusCandidates.includes(num)}
-                      onToggle={toggleBonus}
-                    />
-                  ))}
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="inline-flex items-center gap-2 bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 px-4 py-2 rounded-full text-xs text-slate-300 font-medium">
-                    Selected: <strong className="text-purple-400 text-base">{bonusCandidates.length}</strong>
-                  </span>
-                  <button
-                    onClick={clearBonus}
-                    className="bg-slate-700/50 border border-slate-600 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-600 hover:border-slate-500 transition-all duration-200"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-
-              <hr className="border-slate-700/50 my-6" />
-            </>
-          )}
-
-          {/* Drawn Mains */}
-          <div className="mb-6">
-            <label className="block text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500 font-black text-base mb-4 uppercase tracking-wider">
-              Drawn Mains <span className="text-slate-400 text-xs normal-case font-medium">(exactly {gameConfig.mainNumbers.pick})</span>
-            </label>
-            <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 sm:gap-2.5 mb-4">
-              {NUMBER_RANGE.map((num) => (
-                <NumberChip
-                  key={`draw-${num}`}
-                  number={num}
-                  selected={drawn.includes(num)}
-                  onToggle={toggleDrawn}
-                />
-              ))}
-            </div>
-            <div className="flex items-center gap-3">
-              <span className="inline-flex items-center gap-2 bg-gradient-to-r from-green-500/10 to-emerald-500/10 border border-green-500/30 px-4 py-2 rounded-full text-xs text-slate-300 font-medium">
-                Chosen: <strong className="text-green-400 text-base">{drawn.length}</strong>/{gameConfig.mainNumbers.pick}
-              </span>
-              <button
-                onClick={clearDraw}
-                className="bg-slate-700/50 border border-slate-600 px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-600 hover:border-slate-500 transition-all duration-200"
-              >
-                Clear
-              </button>
-            </div>
-          </div>
-
-          {/* Drawn Bonus - Only show if game has bonus */}
-          {gameConfig.hasBonus && (
-            <>
-              <div className="mb-6">
-                <label className="block text-slate-200 font-bold text-sm mb-3 uppercase tracking-wide">
-                  Drawn Bonus <span className="text-slate-400 text-xs normal-case">(optional)</span>
-                </label>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="number"
-                    min={gameConfig.bonusNumbers.min}
-                    max={gameConfig.bonusNumbers.max}
-                    placeholder="—"
-                    value={drawnBonus}
-                    onChange={(event) => setDrawnBonus(event.target.value)}
-                    className="w-24 px-4 py-3 rounded-xl border-2 border-slate-600 bg-slate-700/50 text-slate-100 text-sm font-semibold focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 transition-all"
-                  />
-                  <span className="text-slate-400 text-xs">Leave empty to ignore bonus tiers</span>
-                </div>
-              </div>
-
-              <hr className="border-slate-700/50 my-6" />
-            </>
-          )}
-
-          {/* Tiers */}
-          <div className="mb-6">
-            <label className="block text-transparent bg-clip-text bg-gradient-to-r from-rose-400 to-orange-500 font-black text-base mb-4 uppercase tracking-wider">Show Tiers</label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {gameConfig.tiers.map((tier) => (
-                <label key={tier.id} className="flex items-center gap-3 text-sm bg-slate-800/50 border-2 border-slate-600/50 px-4 py-3.5 rounded-xl hover:bg-slate-700/50 hover:border-blue-500/50 cursor-pointer transition-all duration-200 active:scale-95">
-                  <input
-                    type="checkbox"
-                    checked={tiers[tier.id]}
-                    onChange={() => toggleTier(tier.id)}
-                    className="w-5 h-5 rounded-lg border-2 border-slate-500 text-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-slate-900 cursor-pointer transition-all"
-                  />
-                  <span className="text-slate-200 font-bold">{tier.label}</span>
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex flex-col gap-4 mb-6">
-            <button
-              onClick={handleGenerate}
-              className="relative w-full bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-600 text-white px-6 py-5 rounded-2xl font-black text-lg shadow-2xl shadow-blue-500/50 hover:shadow-3xl hover:shadow-blue-500/70 transition-all duration-300 transform hover:scale-[1.03] active:scale-[0.98] overflow-hidden group"
-            >
-              <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-violet-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
-              <span className="relative z-10 flex items-center justify-center gap-2">
-                ✨ Generate Combinations
-              </span>
-            </button>
-            <button
-              onClick={handleDownload}
-              className="w-full bg-slate-800/80 border-2 border-slate-600 px-6 py-4 rounded-2xl text-base font-bold hover:bg-slate-700 hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-200"
-            >
-              📥 Download CSV
-            </button>
-          </div>
-
-          {/* Hint */}
-          {hint && (
-            <div className="text-sm rounded-2xl px-5 py-4 border-2 backdrop-blur-sm">
-              {hint.includes('Large output') ? (
-                <div className="bg-red-500/10 border-red-500/50 text-red-400 font-bold">{hint}</div>
-              ) : hint.includes('generated') ? (
-                <div className="bg-emerald-500/10 border-emerald-500/50 text-emerald-400 font-bold flex items-center gap-2">
-                  <span className="text-lg">✓</span> {hint}
-                </div>
-              ) : (
-                <div className="bg-slate-700/30 border-slate-600/50 text-slate-300 font-medium">{hint}</div>
-              )}
-            </div>
-          )}
-          </div>
-        </section>
-
-        {/* RIGHT: Output */}
-        <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/50 overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-blue-500/5 pointer-events-none"></div>
-          <div className="relative z-10">
-          {/* Summary */}
-          <h3 className="text-3xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">Summary</h3>
-
-          {loading ? (
-            <Loader message="Generating combinations..." />
-          ) : summaryCards.length > 0 && (
-            <>
-              {/* Explanation Card */}
-              <div className="mb-6 p-5 bg-gradient-to-r from-blue-500/10 to-cyan-500/10 border-2 border-blue-500/30 rounded-2xl">
-                <div className="flex items-start gap-3">
-                  <div className="text-2xl">💡</div>
-                  <div className="flex-1">
-                    <h4 className="text-cyan-400 font-bold text-base mb-2">Understanding the Numbers:</h4>
-                    <div className="text-slate-300 text-sm space-y-2">
-                      <div className="flex items-start gap-2">
-                        <span className="text-cyan-400 font-bold min-w-[140px]">Main combos:</span>
-                        <span>All possible {gameConfig.mainNumbers.pick}-number combinations from your pool</span>
-                      </div>
-                      {bonusCandidates.length > 0 && (
-                        <div className="flex items-start gap-2">
-                          <span className="text-violet-400 font-bold min-w-[140px]">Total tickets:</span>
-                          <span>Main combos × {bonusCandidates.length} bonus numbers = Every possible ticket</span>
-                        </div>
-                      )}
-                      <div className="flex items-start gap-2">
-                        <span className="text-green-400 font-bold min-w-[140px]">Filtered results:</span>
-                        <span>Only tickets matching your checked tiers (shown in table)</span>
-                      </div>
-                    </div>
-                    {bonusCandidates.length > 0 && (
-                      <div className="mt-3 p-3 bg-violet-500/10 border border-violet-500/30 rounded-lg">
-                        <div className="text-xs text-violet-300">
-                          <strong>Example:</strong> If you have 5 main combos and 3 bonus candidates, you get 5 × 3 = <strong>15 total tickets</strong>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
-                {summaryCards.map((card) => (
-                  <StatCard key={card.label} label={card.label} value={card.value} />
-                ))}
-              </div>
-            </>
-          )}
-
-          {/* Combinations */}
-          <h3 className="text-3xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-500">Combinations</h3>
-
-          {loading ? (
-            <div className="mt-8">
-              <Loader message="Calculating combinations..." />
-            </div>
-          ) : (
-            <>
-              {/* Pagination Controls - Top */}
-              <PaginationControls
-            currentPage={currentPage}
-            totalPages={totalPages}
-            rowsPerPage={rowsPerPage}
-            totalRows={rows.length}
-            onPageChange={setCurrentPage}
-            onRowsPerPageChange={(newRowsPerPage) => {
-              setRowsPerPage(newRowsPerPage)
-              setCurrentPage(1)
-            }}
-          />
-
-          {/* Table */}
-          <div className="border-2 border-slate-700/50 rounded-2xl bg-slate-900/60 backdrop-blur-sm shadow-inner mt-4 overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-slate-800/95 backdrop-blur-md">
-                <tr className="border-b-2 border-blue-500/30">
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">#</th>
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Mains</th>
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Bonus</th>
-                  <th className="px-3 sm:px-4 py-4 text-right text-xs font-black uppercase tracking-widest text-slate-300">Match</th>
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300 hidden sm:table-cell">Bonus Hit</th>
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Tier</th>
-                </tr>
-              </thead>
-              <tbody>
-                {currentRows.length === 0 ? (
-                  <tr>
-                    <td colSpan="6" className="px-4 py-12 text-center text-slate-400 text-sm">
-                      No combinations to display. Generate results to see combinations here.
-                    </td>
-                  </tr>
-                ) : (
-                  currentRows.map((row, idx) => (
-                    <tr key={row.id} className={`hover:bg-blue-500/10 transition-all duration-200 ${idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'}`}>
-                      <td className="px-3 sm:px-4 py-3 text-sm text-slate-500 border-b border-slate-700/30 font-medium">{row.id}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm font-bold text-slate-200 border-b border-slate-700/30">{row.mains}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm text-slate-300 border-b border-slate-700/30 font-medium">{row.bonus}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm text-right font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 border-b border-slate-700/30">{row.match}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm text-slate-300 border-b border-slate-700/30 font-medium hidden sm:table-cell">{row.bonusHit}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm border-b border-slate-700/30">
-                        <span className="inline-block text-xs px-3 py-1.5 bg-gradient-to-r from-blue-500/30 to-violet-500/30 border border-blue-400/50 rounded-full text-blue-300 font-bold shadow-lg">
-                          {row.tier}
-                        </span>
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Pagination Controls - Bottom */}
-          {rows.length > 0 && (
-            <div className="mt-4">
-              <PaginationControls
-                currentPage={currentPage}
-                totalPages={totalPages}
-                rowsPerPage={rowsPerPage}
-                totalRows={rows.length}
-                onPageChange={setCurrentPage}
-                onRowsPerPageChange={(newRowsPerPage) => {
-                  setRowsPerPage(newRowsPerPage)
-                  setCurrentPage(1)
-                }}
-              />
-            </div>
-          )}
-            </>
-          )}
-          </div>
-        </section>
-      </main>
       )}
 
       {/* Coverage Analysis Tab */}

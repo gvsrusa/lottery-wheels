@@ -1,12 +1,11 @@
-import { Loader } from "../common/Loader"
-import { NumberChip } from "../common/NumberChip"
-import { StatCard } from "../common/StatCard"
-import { PaginationControls } from "../common/PaginationControls"
-import { nCk, findMinimumCovering } from "../../utils/combinatorics"
-import { formatNumbers, toCSV } from "../../utils/formatters"
+import { nCk, findMinimumCovering } from '../../utils/combinatorics'
+import { toCSV, formatNumbers } from '../../utils/formatters'
+import { Loader } from '../common/Loader'
+import { NumberChip } from '../common/NumberChip'
+import { StatCard } from '../common/StatCard'
+import { PaginationControls } from '../common/PaginationControls'
 
-export 
-function CoverageAnalysisTab({
+export function CoverageAnalysisTab({
   gameConfig,
   NUMBER_RANGE,
   coveragePool,
