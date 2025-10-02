@@ -204,7 +204,7 @@ export function WheelBuilderTab({ gameConfig }) {
 
     const headers = ['ticket', ...Array.from({ length: k }, (_, i) => `n${i + 1}`)]
     const rows = tickets.map((t, i) => [i + 1, ...t])
-    const csv = toCSV(headers, rows)
+    const csv = toCSV([headers, ...rows])
 
     const blob = new Blob([csv], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
