@@ -76,65 +76,69 @@ function App() {
       <div className="fixed inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-900/20 via-transparent to-violet-900/20 pointer-events-none"></div>
 
       {/* Header */}
-      <header className="relative border-b border-slate-800/50 bg-slate-900/60 backdrop-blur-xl px-6 py-6 sm:py-8 shadow-2xl">
+      <header className="relative border-b border-slate-800/50 bg-slate-900/60 backdrop-blur-xl px-4 sm:px-6 py-4 sm:py-6 shadow-2xl">
         <div className="max-w-[1800px] mx-auto">
-          <h1 className="text-3xl sm:text-5xl font-black tracking-tight bg-gradient-to-r from-cyan-400 via-blue-500 to-violet-500 bg-clip-text text-transparent drop-shadow-2xl">
+          <h1 className="text-2xl sm:text-3xl md:text-5xl font-black tracking-tight bg-gradient-to-r from-cyan-400 via-blue-500 to-violet-500 bg-clip-text text-transparent drop-shadow-2xl">
             {gameConfig.name}
           </h1>
-          <p className="text-slate-300 text-sm sm:text-lg font-medium mt-2 flex items-center gap-2">
+          <p className="text-slate-300 text-xs sm:text-sm md:text-lg font-medium mt-2 flex items-center gap-2">
             <span className="inline-block w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
-            {gameConfig.description}
+            <span className="line-clamp-2">{gameConfig.description}</span>
           </p>
 
           {/* Game Selector */}
-          <div className="mt-6 flex flex-wrap gap-2">
-            {Object.entries(GAME_CONFIGS).map(([key, config]) => (
-              <button
-                key={key}
-                onClick={() => handleGameChange(key)}
-                className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-all duration-200 ${
-                  selectedGame === key
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-blue-500/50 scale-105'
-                    : 'bg-slate-800/80 text-slate-300 border-2 border-slate-700 hover:border-blue-500/50 hover:bg-slate-700'
-                }`}
-              >
-                {config.name}
-              </button>
-            ))}
+          <div className="mt-4 sm:mt-6 -mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto">
+            <div className="flex gap-2 pb-2 min-w-max sm:min-w-0 sm:flex-wrap">
+              {Object.entries(GAME_CONFIGS).map(([key, config]) => (
+                <button
+                  key={key}
+                  onClick={() => handleGameChange(key)}
+                  className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 whitespace-nowrap min-h-[44px] touch-manipulation ${
+                    selectedGame === key
+                      ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-blue-500/50 scale-105'
+                      : 'bg-slate-800/80 text-slate-300 border-2 border-slate-700 hover:border-blue-500/50 hover:bg-slate-700'
+                  }`}
+                >
+                  {config.name}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Tab Navigation */}
-          <div className="mt-6 flex gap-2 border-b border-slate-700/50">
-            <button
-              onClick={() => setActiveTab('wheel-builder')}
-              className={`px-6 py-3 font-bold text-sm transition-all duration-200 border-b-4 ${
-                activeTab === 'wheel-builder'
-                  ? 'border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              Wheel Builder
-            </button>
-            <button
-              onClick={() => setActiveTab('coverage-analysis')}
-              className={`px-6 py-3 font-bold text-sm transition-all duration-200 border-b-4 ${
-                activeTab === 'coverage-analysis'
-                  ? 'border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              Coverage Analysis
-            </button>
-            <button
-              onClick={() => setActiveTab('game-configs')}
-              className={`px-6 py-3 font-bold text-sm transition-all duration-200 border-b-4 ${
-                activeTab === 'game-configs'
-                  ? 'border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              Game Configs
-            </button>
+          <div className="mt-4 sm:mt-6 -mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto">
+            <div className="flex gap-1 sm:gap-2 border-b border-slate-700/50 min-w-max sm:min-w-0">
+              <button
+                onClick={() => setActiveTab('wheel-builder')}
+                className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 whitespace-nowrap min-h-[44px] touch-manipulation ${
+                  activeTab === 'wheel-builder'
+                    ? 'border-cyan-500 text-cyan-400'
+                    : 'border-transparent text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                Wheel Builder
+              </button>
+              <button
+                onClick={() => setActiveTab('coverage-analysis')}
+                className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 whitespace-nowrap min-h-[44px] touch-manipulation ${
+                  activeTab === 'coverage-analysis'
+                    ? 'border-cyan-500 text-cyan-400'
+                    : 'border-transparent text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                Coverage Analysis
+              </button>
+              <button
+                onClick={() => setActiveTab('game-configs')}
+                className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 whitespace-nowrap min-h-[44px] touch-manipulation ${
+                  activeTab === 'game-configs'
+                    ? 'border-cyan-500 text-cyan-400'
+                    : 'border-transparent text-slate-400 hover:text-slate-300'
+                }`}
+              >
+                Game Configs
+              </button>
+            </div>
           </div>
         </div>
       </header>

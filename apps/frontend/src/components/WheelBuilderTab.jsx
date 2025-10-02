@@ -245,38 +245,38 @@ export function WheelBuilderTab({ gameConfig }) {
         <div className="flex flex-wrap gap-2 mb-4">
           <button
             onClick={() => quickSelectRandom(10)}
-            className="px-4 py-2 bg-slate-700 text-white text-sm font-bold rounded-xl hover:bg-slate-600 transition-all"
+            className="px-3 sm:px-4 py-2 bg-slate-700 text-white text-xs sm:text-sm font-bold rounded-lg sm:rounded-xl hover:bg-slate-600 transition-all min-h-[44px] touch-manipulation"
           >
             Quick: 10 Random
           </button>
           <button
             onClick={() => quickSelectRandom(15)}
-            className="px-4 py-2 bg-slate-700 text-white text-sm font-bold rounded-xl hover:bg-slate-600 transition-all"
+            className="px-3 sm:px-4 py-2 bg-slate-700 text-white text-xs sm:text-sm font-bold rounded-lg sm:rounded-xl hover:bg-slate-600 transition-all min-h-[44px] touch-manipulation"
           >
             Quick: 15 Random
           </button>
           <button
             onClick={() => quickSelectRandom(20)}
-            className="px-4 py-2 bg-slate-700 text-white text-sm font-bold rounded-xl hover:bg-slate-600 transition-all"
+            className="px-3 sm:px-4 py-2 bg-slate-700 text-white text-xs sm:text-sm font-bold rounded-lg sm:rounded-xl hover:bg-slate-600 transition-all min-h-[44px] touch-manipulation"
           >
             Quick: 20 Random
           </button>
           <button
             onClick={selectAll}
-            className="px-4 py-2 bg-slate-700 text-white text-sm font-bold rounded-xl hover:bg-slate-600 transition-all"
+            className="px-3 sm:px-4 py-2 bg-slate-700 text-white text-xs sm:text-sm font-bold rounded-lg sm:rounded-xl hover:bg-slate-600 transition-all min-h-[44px] touch-manipulation"
           >
             Select All
           </button>
           <button
             onClick={clearPool}
-            className="px-4 py-2 bg-red-700 text-white text-sm font-bold rounded-xl hover:bg-red-600 transition-all"
+            className="px-3 sm:px-4 py-2 bg-red-700 text-white text-xs sm:text-sm font-bold rounded-lg sm:rounded-xl hover:bg-red-600 transition-all min-h-[44px] touch-manipulation"
           >
             Clear All
           </button>
         </div>
 
         {/* Number Grid */}
-        <div className="grid grid-cols-7 sm:grid-cols-10 md:grid-cols-12 lg:grid-cols-14 xl:grid-cols-17 gap-2">
+        <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-15 gap-2">
           {NUMBER_RANGE.map((num) => (
             <NumberChip
               key={num}
@@ -389,56 +389,56 @@ export function WheelBuilderTab({ gameConfig }) {
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap gap-3">
+        <div className="flex flex-wrap gap-2 sm:gap-3">
           <button
             onClick={() => handleGenerate('greedy')}
             disabled={isGenerating || selectedPool.length < k}
-            className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold rounded-xl shadow-lg hover:shadow-cyan-500/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold text-xs sm:text-base rounded-lg sm:rounded-xl shadow-lg hover:shadow-cyan-500/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all min-h-[44px] touch-manipulation"
           >
             Generate
           </button>
           <button
             onClick={() => handleGenerate('scan')}
             disabled={isGenerating || selectedPool.length < k}
-            className="px-6 py-3 bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 text-white font-bold text-xs sm:text-base rounded-lg sm:rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all min-h-[44px] touch-manipulation"
           >
             Scan Here
           </button>
           <button
             onClick={() => handleGenerate('lb')}
             disabled={isGenerating || selectedPool.length < k}
-            className="px-6 py-3 bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 text-white font-bold text-xs sm:text-base rounded-lg sm:rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all min-h-[44px] touch-manipulation"
           >
             Lower Bound
           </button>
           <button
             onClick={() => handleGenerate('universe')}
             disabled={isGenerating || selectedPool.length < k}
-            className="px-6 py-3 bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 text-white font-bold text-xs sm:text-base rounded-lg sm:rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all min-h-[44px] touch-manipulation"
           >
             Universe
           </button>
           <button
             onClick={() => handleGenerate('universe-m')}
             disabled={isGenerating || selectedPool.length < guarantee}
-            className="px-6 py-3 bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 text-white font-bold text-xs sm:text-base rounded-lg sm:rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all min-h-[44px] touch-manipulation whitespace-nowrap"
           >
             Universe C(n,m)
           </button>
 
-          <div className="flex-1"></div>
+          <div className="flex-1 hidden md:block"></div>
 
           <button
             onClick={handleDownload}
             disabled={tickets.length === 0}
-            className="px-6 py-3 bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 text-white font-bold text-xs sm:text-base rounded-lg sm:rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all min-h-[44px] touch-manipulation"
           >
             Download CSV
           </button>
           <button
             onClick={handleCopy}
             disabled={tickets.length === 0}
-            className="px-6 py-3 bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+            className="px-4 sm:px-6 py-2 sm:py-3 bg-slate-700 text-white font-bold text-xs sm:text-base rounded-lg sm:rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all min-h-[44px] touch-manipulation"
           >
             Copy
           </button>
@@ -616,13 +616,13 @@ export function WheelBuilderTab({ gameConfig }) {
                 Shows the minimum number of winning tickets across all possible draw scenarios from your pool.
               </p>
               <div className="border-2 border-slate-700/50 rounded-xl bg-slate-900/60 backdrop-blur-sm shadow-inner overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[350px]">
                   <thead className="bg-slate-800/95 backdrop-blur-md">
                     <tr className="border-b-2 border-emerald-500/30">
-                      <th className="px-3 sm:px-4 py-3 text-left text-xs font-black uppercase tracking-widest text-slate-300">
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-left text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest text-slate-300">
                         Match Level
                       </th>
-                      <th className="px-3 sm:px-4 py-3 text-right text-xs font-black uppercase tracking-widest text-slate-300">
+                      <th className="px-2 sm:px-4 py-2 sm:py-3 text-right text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest text-slate-300">
                         Min Winning Tickets
                       </th>
                     </tr>
@@ -635,10 +635,10 @@ export function WheelBuilderTab({ gameConfig }) {
                           idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'
                         }`}
                       >
-                        <td className="px-3 sm:px-4 py-3 text-sm font-bold text-slate-200 border-b border-slate-700/30">
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-bold text-slate-200 border-b border-slate-700/30">
                           {breakdown.level}
                         </td>
-                        <td className="px-3 sm:px-4 py-3 text-sm text-right font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500 border-b border-slate-700/30">
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-right font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500 border-b border-slate-700/30">
                           {breakdown.tickets.toLocaleString()}
                         </td>
                       </tr>

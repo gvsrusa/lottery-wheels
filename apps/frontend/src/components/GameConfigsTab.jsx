@@ -264,9 +264,9 @@ export function GameConfigsTab({
   const currentRows = rows.slice(startIndex, endIndex)
 
   return (
-    <main className="relative grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6 p-4 sm:p-6 max-w-[1800px] mx-auto">
+    <main className="relative grid grid-cols-1 lg:grid-cols-[380px_1fr] xl:grid-cols-[420px_1fr] gap-4 sm:gap-6 p-3 sm:p-4 md:p-6 max-w-[1800px] mx-auto">
       {/* LEFT: Controls */}
-      <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/50 overflow-hidden">
+      <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-2xl shadow-black/50 overflow-hidden">
         {/* Subtle gradient overlay */}
         <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-violet-500/5 pointer-events-none"></div>
         <div className="relative z-10">
@@ -284,7 +284,7 @@ export function GameConfigsTab({
             <label className="block text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 font-black text-base mb-4 uppercase tracking-wider">
               Your Pool <span className="text-slate-400 text-xs normal-case font-medium">(select {gameConfig.poolRange.min}–{gameConfig.poolRange.max})</span>
             </label>
-            <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 sm:gap-2.5 mb-4">
+            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-7 gap-2 mb-4">
               {NUMBER_RANGE.map((num) => (
                 <NumberChip
                   key={`pool-${num}`}
@@ -314,7 +314,7 @@ export function GameConfigsTab({
                 <label className="block text-transparent bg-clip-text bg-gradient-to-r from-violet-400 to-fuchsia-500 font-black text-base mb-4 uppercase tracking-wider">
                   Bonus Candidates <span className="text-slate-400 text-xs normal-case font-medium">(optional, 0–{gameConfig.bonusCandidatesMax})</span>
                 </label>
-                <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 sm:gap-2.5 mb-4">
+                <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-7 gap-2 mb-4">
                   {BONUS_RANGE.map((num) => (
                     <NumberChip
                       key={`bonus-${num}`}
@@ -346,7 +346,7 @@ export function GameConfigsTab({
             <label className="block text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500 font-black text-base mb-4 uppercase tracking-wider">
               Drawn Mains <span className="text-slate-400 text-xs normal-case font-medium">(exactly {gameConfig.mainNumbers.pick})</span>
             </label>
-            <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 sm:gap-2.5 mb-4">
+            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-7 gap-2 mb-4">
               {NUMBER_RANGE.map((num) => (
                 <NumberChip
                   key={`draw-${num}`}
@@ -413,11 +413,11 @@ export function GameConfigsTab({
           </div>
 
           {/* Actions */}
-          <div className="flex flex-col gap-4 mb-6">
+          <div className="flex flex-col gap-3 sm:gap-4 mb-6">
             <button
               onClick={handleGenerate}
               disabled={isGenerating}
-              className="relative w-full bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-600 text-white px-6 py-5 rounded-2xl font-black text-lg shadow-2xl shadow-blue-500/50 hover:shadow-3xl hover:shadow-blue-500/70 transition-all duration-300 transform hover:scale-[1.03] active:scale-[0.98] overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className="relative w-full bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-600 text-white px-4 sm:px-6 py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-base sm:text-lg shadow-2xl shadow-blue-500/50 hover:shadow-3xl hover:shadow-blue-500/70 transition-all duration-300 transform hover:scale-[1.03] active:scale-[0.98] overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 min-h-[56px] touch-manipulation"
             >
               <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-violet-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
               <span className="relative z-10 flex items-center justify-center gap-2">
@@ -426,7 +426,7 @@ export function GameConfigsTab({
             </button>
             <button
               onClick={handleDownload}
-              className="w-full bg-slate-800/80 border-2 border-slate-600 px-6 py-4 rounded-2xl text-base font-bold hover:bg-slate-700 hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-200"
+              className="w-full bg-slate-800/80 border-2 border-slate-600 px-4 sm:px-6 py-3 sm:py-4 rounded-xl sm:rounded-2xl text-sm sm:text-base font-bold hover:bg-slate-700 hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-200 min-h-[52px] touch-manipulation"
             >
               📥 Download CSV
             </button>
@@ -450,7 +450,7 @@ export function GameConfigsTab({
       </section>
 
       {/* RIGHT: Output */}
-      <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/50 overflow-hidden">
+      <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-2xl shadow-black/50 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-blue-500/5 pointer-events-none"></div>
 
         {/* Loading Overlay */}
@@ -521,15 +521,15 @@ export function GameConfigsTab({
 
           {/* Table */}
           <div className="border-2 border-slate-700/50 rounded-2xl bg-slate-900/60 backdrop-blur-sm shadow-inner mt-4 overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[600px]">
               <thead className="bg-slate-800/95 backdrop-blur-md">
                 <tr className="border-b-2 border-blue-500/30">
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">#</th>
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Mains</th>
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Bonus</th>
-                  <th className="px-3 sm:px-4 py-4 text-right text-xs font-black uppercase tracking-widest text-slate-300">Match</th>
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300 hidden sm:table-cell">Bonus Hit</th>
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Tier</th>
+                  <th className="px-2 sm:px-4 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest text-slate-300">#</th>
+                  <th className="px-2 sm:px-4 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest text-slate-300">Mains</th>
+                  <th className="px-2 sm:px-4 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest text-slate-300">Bonus</th>
+                  <th className="px-2 sm:px-4 py-3 sm:py-4 text-right text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest text-slate-300">Match</th>
+                  <th className="px-2 sm:px-4 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest text-slate-300 hidden md:table-cell">Bonus Hit</th>
+                  <th className="px-2 sm:px-4 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest text-slate-300">Tier</th>
                 </tr>
               </thead>
               <tbody>
@@ -542,13 +542,13 @@ export function GameConfigsTab({
                 ) : (
                   currentRows.map((row, idx) => (
                     <tr key={row.id} className={`hover:bg-blue-500/10 transition-all duration-200 ${idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'}`}>
-                      <td className="px-3 sm:px-4 py-3 text-sm text-slate-500 border-b border-slate-700/30 font-medium">{row.id}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm font-bold text-slate-200 border-b border-slate-700/30">{row.mains}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm text-slate-300 border-b border-slate-700/30 font-medium">{row.bonus}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm text-right font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 border-b border-slate-700/30">{row.match}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm text-slate-300 border-b border-slate-700/30 font-medium hidden sm:table-cell">{row.bonusHit}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm border-b border-slate-700/30">
-                        <span className="inline-block text-xs px-3 py-1.5 bg-gradient-to-r from-blue-500/30 to-violet-500/30 border border-blue-400/50 rounded-full text-blue-300 font-bold shadow-lg">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-slate-500 border-b border-slate-700/30 font-medium">{row.id}</td>
+                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-bold text-slate-200 border-b border-slate-700/30">{row.mains}</td>
+                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-slate-300 border-b border-slate-700/30 font-medium">{row.bonus}</td>
+                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-right font-black text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 border-b border-slate-700/30">{row.match}</td>
+                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-slate-300 border-b border-slate-700/30 font-medium hidden md:table-cell">{row.bonusHit}</td>
+                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm border-b border-slate-700/30">
+                        <span className="inline-block text-[10px] sm:text-xs px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-blue-500/30 to-violet-500/30 border border-blue-400/50 rounded-full text-blue-300 font-bold shadow-lg whitespace-nowrap">
                           {row.tier}
                         </span>
                       </td>

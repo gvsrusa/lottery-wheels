@@ -198,9 +198,9 @@ export function CoverageAnalysisTab({
   }
 
   return (
-    <main className="relative grid grid-cols-1 lg:grid-cols-[420px_1fr] gap-6 p-4 sm:p-6 max-w-[1800px] mx-auto">
+    <main className="relative grid grid-cols-1 lg:grid-cols-[380px_1fr] xl:grid-cols-[420px_1fr] gap-4 sm:gap-6 p-3 sm:p-4 md:p-6 max-w-[1800px] mx-auto">
       {/* LEFT: Controls */}
-      <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/50 overflow-hidden">
+      <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-2xl shadow-black/50 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-transparent to-violet-500/5 pointer-events-none"></div>
         <div className="relative z-10">
           {/* Pool Selection */}
@@ -208,7 +208,7 @@ export function CoverageAnalysisTab({
             <label className="block text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 font-black text-base mb-4 uppercase tracking-wider">
               Your Pool <span className="text-slate-400 text-xs normal-case font-medium">(select {minPool}–{maxPool})</span>
             </label>
-            <div className="grid grid-cols-5 sm:grid-cols-7 gap-2 sm:gap-2.5 mb-4">
+            <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-7 gap-2 mb-4">
               {NUMBER_RANGE.map((num) => (
                 <NumberChip
                   key={`coverage-pool-${num}`}
@@ -265,11 +265,11 @@ export function CoverageAnalysisTab({
           </div>
 
           {/* Actions */}
-          <div className="flex flex-col gap-4 mb-6">
+          <div className="flex flex-col gap-3 sm:gap-4 mb-6">
             <button
               onClick={handleGenerateCoverage}
               disabled={isCoverageGenerating}
-              className="relative w-full bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-600 text-white px-6 py-5 rounded-2xl font-black text-lg shadow-2xl shadow-blue-500/50 hover:shadow-3xl hover:shadow-blue-500/70 transition-all duration-300 transform hover:scale-[1.03] active:scale-[0.98] overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
+              className="relative w-full bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-600 text-white px-4 sm:px-6 py-4 sm:py-5 rounded-xl sm:rounded-2xl font-black text-base sm:text-lg shadow-2xl shadow-blue-500/50 hover:shadow-3xl hover:shadow-blue-500/70 transition-all duration-300 transform hover:scale-[1.03] active:scale-[0.98] overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100 min-h-[56px] touch-manipulation"
             >
               <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-violet-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
               <span className="relative z-10 flex items-center justify-center gap-2">
@@ -278,7 +278,7 @@ export function CoverageAnalysisTab({
             </button>
             <button
               onClick={handleDownloadCoverage}
-              className="w-full bg-slate-800/80 border-2 border-slate-600 px-6 py-4 rounded-2xl text-base font-bold hover:bg-slate-700 hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-200"
+              className="w-full bg-slate-800/80 border-2 border-slate-600 px-4 sm:px-6 py-3 sm:py-4 rounded-xl sm:rounded-2xl text-sm sm:text-base font-bold hover:bg-slate-700 hover:border-blue-500/50 hover:shadow-lg hover:shadow-blue-500/20 transition-all duration-200 min-h-[52px] touch-manipulation"
             >
               📥 Download CSV
             </button>
@@ -300,7 +300,7 @@ export function CoverageAnalysisTab({
       </section>
 
       {/* RIGHT: Results */}
-      <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/50 overflow-hidden">
+      <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-8 shadow-2xl shadow-black/50 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-blue-500/5 pointer-events-none"></div>
 
         {/* Loading Overlay */}
@@ -323,21 +323,21 @@ export function CoverageAnalysisTab({
             <>
               <h3 className="text-3xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500">Coverage Breakdown</h3>
               <div className="border-2 border-slate-700/50 rounded-2xl bg-slate-900/60 backdrop-blur-sm shadow-inner mb-8 overflow-x-auto">
-                <table className="w-full">
+                <table className="w-full min-w-[450px]">
                   <thead className="bg-slate-800/95 backdrop-blur-md">
                     <tr className="border-b-2 border-emerald-500/30">
-                      <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Coverage Level</th>
-                      <th className="px-3 sm:px-4 py-4 text-right text-xs font-black uppercase tracking-widest text-slate-300">Combinations</th>
-                      <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Type</th>
+                      <th className="px-2 sm:px-4 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest text-slate-300">Coverage Level</th>
+                      <th className="px-2 sm:px-4 py-3 sm:py-4 text-right text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest text-slate-300">Combinations</th>
+                      <th className="px-2 sm:px-4 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest text-slate-300">Type</th>
                     </tr>
                   </thead>
                   <tbody>
                     {coverageResults[0].breakdownData.map((breakdown, idx) => (
                       <tr key={`${breakdown.level}-${idx}`} className={`hover:bg-emerald-500/10 transition-all duration-200 ${idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'}`}>
-                        <td className="px-3 sm:px-4 py-3 text-sm font-bold text-slate-200 border-b border-slate-700/30">{breakdown.level}</td>
-                        <td className="px-3 sm:px-4 py-3 text-sm text-right font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500 border-b border-slate-700/30">{breakdown.combos}</td>
-                        <td className="px-3 sm:px-4 py-3 text-sm border-b border-slate-700/30">
-                          <span className={`inline-block text-xs px-3 py-1.5 rounded-full font-bold shadow-lg ${
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-bold text-slate-200 border-b border-slate-700/30">{breakdown.level}</td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-right font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500 border-b border-slate-700/30">{breakdown.combos}</td>
+                        <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm border-b border-slate-700/30">
+                          <span className={`inline-block text-[10px] sm:text-xs px-2 sm:px-3 py-1 sm:py-1.5 rounded-full font-bold shadow-lg whitespace-nowrap ${
                             breakdown.type === 'Primary'
                               ? 'bg-gradient-to-r from-cyan-500/30 to-blue-500/30 border border-cyan-400/50 text-cyan-300'
                               : 'bg-gradient-to-r from-green-500/30 to-emerald-500/30 border border-green-400/50 text-green-300'
@@ -371,12 +371,12 @@ export function CoverageAnalysisTab({
 
           {/* Table */}
           <div className="border-2 border-slate-700/50 rounded-2xl bg-slate-900/60 backdrop-blur-sm shadow-inner mt-4 overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full min-w-[500px]">
               <thead className="bg-slate-800/95 backdrop-blur-md">
                 <tr className="border-b-2 border-blue-500/30">
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">#</th>
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Mains</th>
-                  <th className="px-3 sm:px-4 py-4 text-left text-xs font-black uppercase tracking-widest text-slate-300">Coverage Level</th>
+                  <th className="px-2 sm:px-4 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest text-slate-300">#</th>
+                  <th className="px-2 sm:px-4 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest text-slate-300">Mains</th>
+                  <th className="px-2 sm:px-4 py-3 sm:py-4 text-left text-[10px] sm:text-xs font-black uppercase tracking-wider sm:tracking-widest text-slate-300">Coverage Level</th>
                 </tr>
               </thead>
               <tbody>
@@ -389,10 +389,10 @@ export function CoverageAnalysisTab({
                 ) : (
                   currentRows.map((row, idx) => (
                     <tr key={row.id} className={`hover:bg-blue-500/10 transition-all duration-200 ${idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'}`}>
-                      <td className="px-3 sm:px-4 py-3 text-sm text-slate-500 border-b border-slate-700/30 font-medium">{row.id}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm font-bold text-slate-200 border-b border-slate-700/30">{row.mains}</td>
-                      <td className="px-3 sm:px-4 py-3 text-sm border-b border-slate-700/30">
-                        <span className="inline-block text-xs px-3 py-1.5 bg-gradient-to-r from-green-500/30 to-emerald-500/30 border border-green-400/50 rounded-full text-green-300 font-bold shadow-lg">
+                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm text-slate-500 border-b border-slate-700/30 font-medium">{row.id}</td>
+                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-bold text-slate-200 border-b border-slate-700/30">{row.mains}</td>
+                      <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm border-b border-slate-700/30">
+                        <span className="inline-block text-[10px] sm:text-xs px-2 sm:px-3 py-1 sm:py-1.5 bg-gradient-to-r from-green-500/30 to-emerald-500/30 border border-green-400/50 rounded-full text-green-300 font-bold shadow-lg whitespace-nowrap">
                           {row.coverageLevel}
                         </span>
                       </td>
