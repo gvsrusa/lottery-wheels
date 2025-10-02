@@ -237,6 +237,31 @@ function StatCard({ label, value }) {
   )
 }
 
+function LoadingOverlay({ message }) {
+  return (
+    <div className="absolute inset-0 bg-slate-900/95 backdrop-blur-md z-50 flex items-center justify-center rounded-3xl">
+      <div className="flex flex-col items-center gap-6 p-8">
+        {/* Animated Spinner */}
+        <div className="relative w-20 h-20">
+          <div className="absolute inset-0 border-4 border-slate-700 rounded-full"></div>
+          <div className="absolute inset-0 border-4 border-transparent border-t-cyan-400 border-r-blue-500 rounded-full animate-spin"></div>
+          <div className="absolute inset-2 border-4 border-transparent border-t-violet-400 border-r-purple-500 rounded-full animate-spin" style={{ animationDirection: 'reverse', animationDuration: '1s' }}></div>
+        </div>
+
+        {/* Message */}
+        <div className="text-center">
+          <p className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500 font-black text-xl mb-2">
+            Processing...
+          </p>
+          <p className="text-slate-300 text-sm font-medium">
+            {message}
+          </p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function PaginationControls({ currentPage, totalPages, rowsPerPage, totalRows, onPageChange, onRowsPerPageChange }) {
   const pageNumbers = []
   const maxVisiblePages = 5
@@ -353,6 +378,10 @@ function CoverageAnalysisTab({
   setCoverageCurrentPage,
   coverageRowsPerPage,
   setCoverageRowsPerPage,
+  isCoverageGenerating,
+  setIsCoverageGenerating,
+  coverageLoadingMessage,
+  setCoverageLoadingMessage,
 }) {
   const { pick: pickCount } = gameConfig.mainNumbers
   const minPool = gameConfig.poolRange.min
@@ -402,70 +431,92 @@ function CoverageAnalysisTab({
       return
     }
 
-    // Generate ALL possible combinations from the pool
-    const allCombos = kCombinations(coveragePool, pickCount)
+    // Start loading
+    setIsCoverageGenerating(true)
+    setCoverageLoadingMessage('Generating all combinations from pool...')
 
-    const summary = [
-      { label: 'Pool size', value: coveragePool.length.toLocaleString() },
-      { label: `Total ${pickCount}-number combinations`, value: allCombos.length.toLocaleString() },
-    ]
+    // Use setTimeout to allow UI to update before heavy computation
+    setTimeout(() => {
+      try {
+        // Generate ALL possible combinations from the pool
+        const allCombos = kCombinations(coveragePool, pickCount)
 
-    // Calculate breakdown: for each match level, calculate statistics
-    const coverageBreakdown = []
+        const summary = [
+          { label: 'Pool size', value: coveragePool.length.toLocaleString() },
+          { label: `Total ${pickCount}-number combinations`, value: allCombos.length.toLocaleString() },
+        ]
 
-    for (let matchLevel = pickCount; matchLevel >= 2; matchLevel--) {
-      // Calculate: if exactly 'matchLevel' numbers from pool are drawn,
-      // how many of our combinations will have exactly 'matchLevel' matches?
+        // Update loading message
+        setCoverageLoadingMessage('Analyzing coverage breakdown...')
 
-      // Generate all possible scenarios where exactly matchLevel numbers from pool are drawn
-      const poolSubsets = kCombinations(coveragePool, matchLevel)
+        // Calculate breakdown: for each match level, calculate statistics
+        const coverageBreakdown = []
 
-      let minWinningCombos = Infinity
+        for (let matchLevel = pickCount; matchLevel >= 2; matchLevel--) {
+          // Calculate: if exactly 'matchLevel' numbers from pool are drawn,
+          // how many of our combinations will have exactly 'matchLevel' matches?
 
-      // For each scenario, count how many combos win
-      for (const drawnFromPool of poolSubsets) {
-        let winningCount = 0
+          // Generate all possible scenarios where exactly matchLevel numbers from pool are drawn
+          const poolSubsets = kCombinations(coveragePool, matchLevel)
 
-        for (const combo of allCombos) {
-          // Count matches between combo and drawn pool numbers
-          const matches = combo.filter(num => drawnFromPool.includes(num)).length
-          if (matches === matchLevel) {
-            winningCount++
+          let minWinningCombos = Infinity
+
+          // For each scenario, count how many combos win
+          for (const drawnFromPool of poolSubsets) {
+            let winningCount = 0
+
+            for (const combo of allCombos) {
+              // Count matches between combo and drawn pool numbers
+              const matches = combo.filter(num => drawnFromPool.includes(num)).length
+              if (matches === matchLevel) {
+                winningCount++
+              }
+            }
+
+            minWinningCombos = Math.min(minWinningCombos, winningCount)
           }
+
+          coverageBreakdown.push({
+            level: `${matchLevel}/${pickCount}`,
+            combos: minWinningCombos === Infinity ? 0 : minWinningCombos,
+            type: checkedLevels.includes(matchLevel) ? 'Selected' : 'Info',
+          })
         }
 
-        minWinningCombos = Math.min(minWinningCombos, winningCount)
+        summary.push({
+          label: 'Match breakdown',
+          value: 'See table below',
+        })
+
+        // Update loading message
+        setCoverageLoadingMessage('Building results table...')
+
+        // Add all combinations to results
+        const allResults = []
+        let indexCounter = 1
+
+        for (const combo of allCombos) {
+          allResults.push({
+            id: indexCounter,
+            mains: formatNumbers(combo),
+            coverageLevel: 'All combinations',
+            breakdownData: coverageBreakdown,
+          })
+          indexCounter += 1
+        }
+
+        setCoverageSummary(summary)
+        setCoverageResults(allResults)
+        setCoverageHint(`${allResults.length.toLocaleString()} combinations generated from your pool.`)
+      } catch (error) {
+        setCoverageHint('An error occurred while generating coverage. Please try with a smaller pool.')
+        console.error('Coverage generation error:', error)
+      } finally {
+        // Stop loading
+        setIsCoverageGenerating(false)
+        setCoverageLoadingMessage('')
       }
-
-      coverageBreakdown.push({
-        level: `${matchLevel}/${pickCount}`,
-        combos: minWinningCombos === Infinity ? 0 : minWinningCombos,
-        type: checkedLevels.includes(matchLevel) ? 'Selected' : 'Info',
-      })
-    }
-
-    summary.push({
-      label: 'Match breakdown',
-      value: 'See table below',
-    })
-
-    // Add all combinations to results
-    const allResults = []
-    let indexCounter = 1
-
-    for (const combo of allCombos) {
-      allResults.push({
-        id: indexCounter,
-        mains: formatNumbers(combo),
-        coverageLevel: 'All combinations',
-        breakdownData: coverageBreakdown,
-      })
-      indexCounter += 1
-    }
-
-    setCoverageSummary(summary)
-    setCoverageResults(allResults)
-    setCoverageHint(`${allResults.length.toLocaleString()} combinations generated from your pool.`)
+    }, 100)
   }
 
   const handleDownloadCoverage = () => {
@@ -573,11 +624,12 @@ function CoverageAnalysisTab({
           <div className="flex flex-col gap-4 mb-6">
             <button
               onClick={handleGenerateCoverage}
-              className="relative w-full bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-600 text-white px-6 py-5 rounded-2xl font-black text-lg shadow-2xl shadow-blue-500/50 hover:shadow-3xl hover:shadow-blue-500/70 transition-all duration-300 transform hover:scale-[1.03] active:scale-[0.98] overflow-hidden group"
+              disabled={isCoverageGenerating}
+              className="relative w-full bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-600 text-white px-6 py-5 rounded-2xl font-black text-lg shadow-2xl shadow-blue-500/50 hover:shadow-3xl hover:shadow-blue-500/70 transition-all duration-300 transform hover:scale-[1.03] active:scale-[0.98] overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-violet-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
               <span className="relative z-10 flex items-center justify-center gap-2">
-                ✨ Calculate Coverage
+                {isCoverageGenerating ? '⏳ Processing...' : '✨ Calculate Coverage'}
               </span>
             </button>
             <button
@@ -606,6 +658,10 @@ function CoverageAnalysisTab({
       {/* RIGHT: Results */}
       <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/50 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-blue-500/5 pointer-events-none"></div>
+
+        {/* Loading Overlay */}
+        {isCoverageGenerating && <LoadingOverlay message={coverageLoadingMessage} />}
+
         <div className="relative z-10">
           {/* Summary */}
           <h3 className="text-3xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">Summary</h3>
@@ -749,6 +805,12 @@ function App() {
   const [coverageHint, setCoverageHint] = useState('')
   const [coverageCurrentPage, setCoverageCurrentPage] = useState(1)
   const [coverageRowsPerPage, setCoverageRowsPerPage] = useState(50)
+  const [isCoverageGenerating, setIsCoverageGenerating] = useState(false)
+  const [coverageLoadingMessage, setCoverageLoadingMessage] = useState('')
+
+  // Game Configs Tab Loading States
+  const [isGenerating, setIsGenerating] = useState(false)
+  const [loadingMessage, setLoadingMessage] = useState('')
 
   const gameConfig = GAME_CONFIGS[selectedGame]
   const NUMBER_RANGE = Array.from(
@@ -877,99 +939,118 @@ function App() {
       }
     }
 
-    const K = poolsOverlap.length
-    const totalPerBonus = nCk(pool.length, pickCount)
+    // Start loading
+    setIsGenerating(true)
+    setLoadingMessage('Generating combinations...')
 
-    // Calculate theoretical matches for different tiers
-    const matchTheory = {}
-    for (let i = pickCount; i >= 2; i--) {
-      const matched = nCk(K, i)
-      const unmatched = i < pickCount ? nCk(pool.length - K, pickCount - i) : 1
-      matchTheory[i] = matched * unmatched
-    }
-    const bonusPoolCount = bonusCandidates.length
+    // Use setTimeout to allow UI to update before heavy computation
+    setTimeout(() => {
+      try {
+        const K = poolsOverlap.length
+        const totalPerBonus = nCk(pool.length, pickCount)
 
-    const summary = [
-      { label: 'Pool size', value: pool.length.toLocaleString() },
-      { label: 'Drawn numbers', value: formatNumbers(drawn) },
-      { label: 'Matching numbers (K)', value: K.toLocaleString() },
-      { label: `Main combos (${pickCount}-number)`, value: totalPerBonus.toLocaleString() },
-    ]
+        // Calculate theoretical matches for different tiers
+        const matchTheory = {}
+        for (let i = pickCount; i >= 2; i--) {
+          const matched = nCk(K, i)
+          const unmatched = i < pickCount ? nCk(pool.length - K, pickCount - i) : 1
+          matchTheory[i] = matched * unmatched
+        }
+        const bonusPoolCount = bonusCandidates.length
 
-    // Add match theory cards dynamically
-    for (let i = pickCount; i >= Math.max(2, pickCount - 3); i--) {
-      if (matchTheory[i] !== undefined) {
-        summary.push({
-          label: `${i}/${pickCount} (theory)`,
-          value: matchTheory[i].toLocaleString(),
+        const summary = [
+          { label: 'Pool size', value: pool.length.toLocaleString() },
+          { label: 'Drawn numbers', value: formatNumbers(drawn) },
+          { label: 'Matching numbers (K)', value: K.toLocaleString() },
+          { label: `Main combos (${pickCount}-number)`, value: totalPerBonus.toLocaleString() },
+        ]
+
+        // Add match theory cards dynamically
+        for (let i = pickCount; i >= Math.max(2, pickCount - 3); i--) {
+          if (matchTheory[i] !== undefined) {
+            summary.push({
+              label: `${i}/${pickCount} (theory)`,
+              value: matchTheory[i].toLocaleString(),
+            })
+          }
+        }
+
+        if (bonusPoolCount > 0) {
+          const bonusHit = parsedDrawBonus != null && bonusCandidates.includes(parsedDrawBonus)
+          summary.push({ label: 'Bonus candidates', value: bonusCandidates.join(', ') || '—' })
+          summary.push({ label: 'Drawn bonus', value: parsedDrawBonus ?? '—' })
+          summary.push({ label: 'Bonus hit?', value: bonusHit ? 'Yes' : 'No' })
+          summary.push({
+            label: 'Total tickets',
+            value: (totalPerBonus * bonusPoolCount).toLocaleString(),
+          })
+        }
+
+        // Update loading message
+        setLoadingMessage('Building results table...')
+
+        const mainsTickets = kCombinations(pool, pickCount)
+        const bonuses = gameConfig.hasBonus && bonusPoolCount > 0 ? bonusCandidates : [null]
+        const bonusLogicActive = gameConfig.hasBonus && parsedDrawBonus != null && bonusPoolCount > 0
+
+        const activeRows = []
+        let indexCounter = 1
+        const TIER_LABEL = Object.fromEntries(gameConfig.tiers.map((tier) => [tier.id, tier.label]))
+
+        for (const ticket of mainsTickets) {
+          const matchedMains = ticket.filter((value) => drawn.includes(value)).length
+
+          for (const bonus of bonuses) {
+            const bonusHit = bonusLogicActive && bonus === parsedDrawBonus
+            let tierKey = null
+
+            // Dynamic tier key generation based on matches
+            if (gameConfig.hasBonus) {
+              tierKey = bonusHit ? `${matchedMains}of${pickCount}b` : `${matchedMains}of${pickCount}`
+            } else {
+              tierKey = `${matchedMains}of${pickCount}`
+            }
+
+            if (!tiers[tierKey]) {
+              continue
+            }
+
+            activeRows.push({
+              id: indexCounter,
+              mains: formatNumbers(ticket),
+              bonus: bonus ?? '—',
+              match: matchedMains,
+              bonusHit: bonusLogicActive ? (bonusHit ? 'Yes' : 'No') : '—',
+              tier: TIER_LABEL[tierKey] || tierKey,
+            })
+            indexCounter += 1
+          }
+        }
+
+        // Add filtered results count to summary
+        summary.splice(4, 0, {
+          label: 'Filtered results',
+          value: activeRows.length.toLocaleString(),
+          tooltip: 'Combinations matching your selected tiers (shown in table below)'
         })
-      }
-    }
 
-    if (bonusPoolCount > 0) {
-      const bonusHit = parsedDrawBonus != null && bonusCandidates.includes(parsedDrawBonus)
-      summary.push({ label: 'Bonus candidates', value: bonusCandidates.join(', ') || '—' })
-      summary.push({ label: 'Drawn bonus', value: parsedDrawBonus ?? '—' })
-      summary.push({ label: 'Bonus hit?', value: bonusHit ? 'Yes' : 'No' })
-      summary.push({
-        label: 'Total tickets',
-        value: (totalPerBonus * bonusPoolCount).toLocaleString(),
-      })
-    }
-
-    const mainsTickets = kCombinations(pool, pickCount)
-    const bonuses = gameConfig.hasBonus && bonusPoolCount > 0 ? bonusCandidates : [null]
-    const bonusLogicActive = gameConfig.hasBonus && parsedDrawBonus != null && bonusPoolCount > 0
-
-    const activeRows = []
-    let indexCounter = 1
-    const TIER_LABEL = Object.fromEntries(gameConfig.tiers.map((tier) => [tier.id, tier.label]))
-
-    for (const ticket of mainsTickets) {
-      const matchedMains = ticket.filter((value) => drawn.includes(value)).length
-
-      for (const bonus of bonuses) {
-        const bonusHit = bonusLogicActive && bonus === parsedDrawBonus
-        let tierKey = null
-
-        // Dynamic tier key generation based on matches
-        if (gameConfig.hasBonus) {
-          tierKey = bonusHit ? `${matchedMains}of${pickCount}b` : `${matchedMains}of${pickCount}`
+        if (activeRows.length > 12000) {
+          setHint(`Large output (${activeRows.length.toLocaleString()} rows). Consider narrowing tiers or reducing pool size.`)
         } else {
-          tierKey = `${matchedMains}of${pickCount}`
+          setHint(`${activeRows.length.toLocaleString()} rows generated.`)
         }
 
-        if (!tiers[tierKey]) {
-          continue
-        }
-
-        activeRows.push({
-          id: indexCounter,
-          mains: formatNumbers(ticket),
-          bonus: bonus ?? '—',
-          match: matchedMains,
-          bonusHit: bonusLogicActive ? (bonusHit ? 'Yes' : 'No') : '—',
-          tier: TIER_LABEL[tierKey] || tierKey,
-        })
-        indexCounter += 1
+        setSummaryCards(summary)
+        setRows(activeRows)
+      } catch (error) {
+        setHint('An error occurred while generating combinations. Please try with a smaller pool.')
+        console.error('Generation error:', error)
+      } finally {
+        // Stop loading
+        setIsGenerating(false)
+        setLoadingMessage('')
       }
-    }
-
-    // Add filtered results count to summary
-    summary.splice(4, 0, {
-      label: 'Filtered results',
-      value: activeRows.length.toLocaleString(),
-      tooltip: 'Combinations matching your selected tiers (shown in table below)'
-    })
-
-    if (activeRows.length > 12000) {
-      setHint(`Large output (${activeRows.length.toLocaleString()} rows). Consider narrowing tiers or reducing pool size.`)
-    } else {
-      setHint(`${activeRows.length.toLocaleString()} rows generated.`)
-    }
-
-    setSummaryCards(summary)
-    setRows(activeRows)
+    }, 100)
   }
 
   const handleDownload = () => {
@@ -1207,11 +1288,12 @@ function App() {
           <div className="flex flex-col gap-4 mb-6">
             <button
               onClick={handleGenerate}
-              className="relative w-full bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-600 text-white px-6 py-5 rounded-2xl font-black text-lg shadow-2xl shadow-blue-500/50 hover:shadow-3xl hover:shadow-blue-500/70 transition-all duration-300 transform hover:scale-[1.03] active:scale-[0.98] overflow-hidden group"
+              disabled={isGenerating}
+              className="relative w-full bg-gradient-to-r from-cyan-500 via-blue-500 to-violet-600 text-white px-6 py-5 rounded-2xl font-black text-lg shadow-2xl shadow-blue-500/50 hover:shadow-3xl hover:shadow-blue-500/70 transition-all duration-300 transform hover:scale-[1.03] active:scale-[0.98] overflow-hidden group disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               <span className="absolute inset-0 bg-gradient-to-r from-cyan-400 to-violet-500 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></span>
               <span className="relative z-10 flex items-center justify-center gap-2">
-                ✨ Generate Combinations
+                {isGenerating ? '⏳ Processing...' : '✨ Generate Combinations'}
               </span>
             </button>
             <button
@@ -1242,6 +1324,10 @@ function App() {
         {/* RIGHT: Output */}
         <section className="relative bg-slate-900/80 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-6 sm:p-8 shadow-2xl shadow-black/50 overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-br from-violet-500/5 via-transparent to-blue-500/5 pointer-events-none"></div>
+
+          {/* Loading Overlay */}
+          {isGenerating && <LoadingOverlay message={loadingMessage} />}
+
           <div className="relative z-10">
           {/* Summary */}
           <h3 className="text-3xl font-black mb-6 text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-500">Summary</h3>
@@ -1385,6 +1471,10 @@ function App() {
           setCoverageCurrentPage={setCoverageCurrentPage}
           coverageRowsPerPage={coverageRowsPerPage}
           setCoverageRowsPerPage={setCoverageRowsPerPage}
+          isCoverageGenerating={isCoverageGenerating}
+          setIsCoverageGenerating={setIsCoverageGenerating}
+          coverageLoadingMessage={coverageLoadingMessage}
+          setCoverageLoadingMessage={setCoverageLoadingMessage}
         />
       )}
     </div>
