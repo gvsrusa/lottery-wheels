@@ -1,11 +1,6 @@
 import { useState, useMemo } from 'react'
-import { nCk, kCombinations } from '../utils/combinatorics'
-import {
-  greedyWheel,
-  exactUniverseTickets,
-  calculateWheelStats,
-  UNIVERSE_TICKET_CAP,
-} from '../utils/wheelBuilder'
+import { nCk } from '../utils/combinatorics'
+import { calculateWheelStats } from '../utils/wheelBuilder'
 import { toCSV } from '../utils/formatting'
 import { LoadingOverlay } from './ui/LoadingOverlay'
 import { StatCard } from './ui/StatCard'
@@ -99,41 +94,6 @@ export function WheelBuilderTab({ gameConfig }) {
     }
   }
 
-  // Calculate coverage breakdown
-  const calculateCoverageBreakdown = (pool, tickets, k) => {
-    const breakdown = []
-
-    // For each match level from k down to 2
-    for (let matchLevel = k; matchLevel >= 2; matchLevel--) {
-      // Generate all possible scenarios where exactly matchLevel numbers from pool are drawn
-      const poolSubsets = kCombinations(pool, matchLevel)
-
-      let minWinningTickets = Infinity
-
-      // For each scenario, count how many tickets win
-      for (const drawnFromPool of poolSubsets) {
-        let winningCount = 0
-
-        for (const ticket of tickets) {
-          // Count matches between ticket and drawn pool numbers
-          const matches = ticket.filter(num => drawnFromPool.includes(num)).length
-          if (matches === matchLevel) {
-            winningCount++
-          }
-        }
-
-        minWinningTickets = Math.min(minWinningTickets, winningCount)
-      }
-
-      breakdown.push({
-        level: `${matchLevel}/${k}`,
-        tickets: minWinningTickets === Infinity ? 0 : minWinningTickets,
-      })
-    }
-
-    return breakdown
-  }
-
   // Submit proof verification job
   const verifyProof = async (pool, k, m, tickets) => {
     setProofStatus({ status: 'queued', progress: 0, total: 0 })
@@ -175,54 +135,41 @@ export function WheelBuilderTab({ gameConfig }) {
     setCoverageBreakdown(null)
 
     try {
-      let result
+      // Call backend API to generate tickets
+      const response = await fetch(`${API_BASE_URL}/api/generate-tickets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pool: selectedPool,
+          k,
+          guarantee: m,
+          effort,
+          seed,
+          scanCount,
+          mode,
+        }),
+      })
 
-      if (mode === 'universe') {
-        const tot = nCk(n, k)
-        if (tot > UNIVERSE_TICKET_CAP) {
-          alert(
-            `Universe mode needs ${tot.toLocaleString()} tickets. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`
-          )
-          setIsGenerating(false)
-          return
-        }
-        result = exactUniverseTickets(selectedPool, k)
-      } else if (mode === 'universe-m') {
-        const tot = nCk(n, m)
-        if (tot > UNIVERSE_TICKET_CAP) {
-          alert(
-            `Universe C(n,m) mode needs ${tot.toLocaleString()} combinations. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`
-          )
-          setIsGenerating(false)
-          return
-        }
-        result = exactUniverseTickets(selectedPool, m)
-      } else {
-        let limit = null
-        if (mode === 'scan') {
-          limit = Math.max(1, scanCount)
-        } else if (mode === 'lb') {
-          limit = stats.lowerBound
-        }
-        const { tickets: generated } = greedyWheel(selectedPool, k, m, effort, seed, limit)
-        result = generated
+      if (!response.ok) {
+        const errorData = await response.json()
+        alert(errorData.error || 'Failed to generate tickets')
+        setIsGenerating(false)
+        return
       }
 
-      setTickets(result)
-      setCurrentPage(1) // Reset to first page
+      const data = await response.json()
 
-      // Calculate coverage breakdown
-      setLoadingMessage('Calculating coverage breakdown...')
-      const breakdown = calculateCoverageBreakdown(selectedPool, result, k)
-      setCoverageBreakdown(breakdown)
+      setTickets(data.tickets)
+      setCoverageBreakdown(data.coverageBreakdown)
+      setCurrentPage(1) // Reset to first page
 
       setLoadingMessage('Verifying coverage proof...')
 
       // Submit proof verification to backend
-      await verifyProof(selectedPool, k, m, result)
+      await verifyProof(selectedPool, k, m, data.tickets)
     } catch (error) {
       console.error('Error generating tickets:', error)
-      alert(`Error: ${error.message}`)
+      alert(`Error: ${error.message}. Make sure to run: npm run dev:server`)
     } finally {
       setIsGenerating(false)
       setLoadingMessage('')

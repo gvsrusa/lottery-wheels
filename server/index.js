@@ -7,6 +7,10 @@ const PORT = process.env.PORT || 3001
 app.use(cors())
 app.use(express.json({ limit: '50mb' }))
 
+// Constants
+const HARD_EXACT_BUILD = 1_000_000
+const UNIVERSE_TICKET_CAP = 100_000
+
 // Queue for proof verification jobs
 const proofQueue = new Map()
 let jobIdCounter = 0
@@ -14,16 +18,228 @@ let jobIdCounter = 0
 /**
  * Helper: Calculate binomial coefficient
  */
-function C(n, k) {
+function nCk(n, k) {
   if (k < 0 || k > n) return 0
-  k = Math.min(k, n - k)
-  let num = 1
-  let den = 1
-  for (let i = 1; i <= k; i += 1) {
-    num *= n - k + i
-    den *= i
+  const limit = Math.min(k, n - k)
+  let numerator = 1
+  let denominator = 1
+  for (let i = 1; i <= limit; i += 1) {
+    numerator *= n - limit + i
+    denominator *= i
   }
-  return Math.round(num / den)
+  return numerator / denominator
+}
+
+/**
+ * Generate all k-combinations from an array of values
+ */
+function kCombinations(values, k) {
+  const result = []
+  const stack = []
+
+  function backtrack(start) {
+    if (stack.length === k) {
+      result.push([...stack])
+      return
+    }
+    for (let i = start; i < values.length; i += 1) {
+      stack.push(values[i])
+      backtrack(i + 1)
+      stack.pop()
+    }
+  }
+
+  backtrack(0)
+  return result
+}
+
+/**
+ * Calculate Schönheim lower bound
+ */
+function schoenheimLB(n, k, m) {
+  let val = 1
+  for (let i = 0; i < m; i += 1) {
+    val = Math.ceil(val * ((n - i) / (k - i)))
+  }
+  return val
+}
+
+/**
+ * Linear congruential generator
+ */
+function makeLCG(seed) {
+  let state = BigInt((seed >>> 0) || (Date.now() % 2147483647))
+  if (state === 0n) state = 1n
+  return () => {
+    state = (48271n * state) % 2147483647n
+    return Number(state) / 2147483647
+  }
+}
+
+/**
+ * Hash a string to a 32-bit integer seed
+ */
+function hashSeed(s) {
+  if (!s) return Math.floor(Math.random() * 2 ** 31)
+  let h = 2166136261 >>> 0
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i)
+    h = Math.imul(h, 16777619)
+  }
+  return h >>> 0
+}
+
+/**
+ * Serialize an array to a string key
+ */
+function serialize(a) {
+  return a.join('-')
+}
+
+/**
+ * Calculate statistics for wheel generation
+ */
+function calculateWheelStats(n, k, m) {
+  const lbCount = Math.ceil(nCk(n, m) / nCk(k, m))
+  const lbSch = schoenheimLB(n, k, m)
+  const universeSize = nCk(n, m)
+  const allTickets = nCk(n, k)
+
+  return {
+    lbCount,
+    lbSch,
+    lowerBound: Math.max(lbCount, lbSch),
+    universeSize,
+    allTickets,
+  }
+}
+
+/**
+ * Generate a greedy lottery wheel
+ */
+function greedyWheel(pool, k, m, effort, seed, limit = null) {
+  const rand = makeLCG(hashSeed(seed))
+  const n = pool.length
+  const totalM = nCk(n, m)
+  const exact = totalM <= HARD_EXACT_BUILD
+
+  let uncovered = null
+  const chooseIdx = kCombinations(
+    Array.from({ length: k }, (_, i) => i),
+    m
+  )
+
+  if (exact) {
+    uncovered = new Set(kCombinations(pool, m).map(serialize))
+  }
+
+  const tickets = []
+  const seen = new Set()
+  const mPerTicket = nCk(k, m)
+
+  let steps = 0
+  const maxSteps = 200000
+
+  function gain(t) {
+    if (!exact) return mPerTicket
+    let g = 0
+    for (const idx of chooseIdx) {
+      const sub = idx.map((i) => t[i])
+      if (uncovered.has(serialize(sub))) g += 1
+    }
+    return g
+  }
+
+  function randomKTicketFromPool(rand) {
+    const indices = new Set()
+    while (indices.size < k) {
+      indices.add(Math.floor(rand() * n))
+    }
+    return Array.from(indices)
+      .sort((a, b) => a - b)
+      .map((i) => pool[i])
+  }
+
+  while (true) {
+    if (limit != null && tickets.length >= limit) break
+    if (exact && uncovered.size === 0 && limit === null) break
+    if (steps >= maxSteps) break
+    steps += 1
+
+    let best = null
+    let bestGain = -1
+
+    for (let i = 0; i < effort; i += 1) {
+      const cand = randomKTicketFromPool(rand)
+      const key = serialize(cand)
+      if (seen.has(key)) continue
+
+      const g = gain(cand)
+      if (g > bestGain) {
+        bestGain = g
+        best = cand
+        if (g === mPerTicket) break
+      }
+    }
+
+    if (!best) best = randomKTicketFromPool(rand)
+
+    tickets.push(best)
+    seen.add(serialize(best))
+
+    if (exact) {
+      for (const idx of chooseIdx) {
+        const sub = idx.map((i) => best[i])
+        uncovered.delete(serialize(sub))
+      }
+    }
+  }
+
+  return { tickets }
+}
+
+/**
+ * Generate all possible tickets (universe mode)
+ */
+function exactUniverseTickets(pool, k) {
+  return kCombinations(pool, k)
+}
+
+/**
+ * Calculate coverage breakdown
+ */
+function calculateCoverageBreakdown(pool, tickets, k) {
+  const breakdown = []
+
+  // For each match level from k down to 2
+  for (let matchLevel = k; matchLevel >= 2; matchLevel--) {
+    // Generate all possible scenarios where exactly matchLevel numbers from pool are drawn
+    const poolSubsets = kCombinations(pool, matchLevel)
+
+    let minWinningTickets = Infinity
+
+    // For each scenario, count how many tickets win
+    for (const drawnFromPool of poolSubsets) {
+      let winningCount = 0
+
+      for (const ticket of tickets) {
+        // Count matches between ticket and drawn pool numbers
+        const matches = ticket.filter(num => drawnFromPool.includes(num)).length
+        if (matches === matchLevel) {
+          winningCount++
+        }
+      }
+
+      minWinningTickets = Math.min(minWinningTickets, winningCount)
+    }
+
+    breakdown.push({
+      level: `${matchLevel}/${k}`,
+      tickets: minWinningTickets === Infinity ? 0 : minWinningTickets,
+    })
+  }
+
+  return breakdown
 }
 
 /**
@@ -103,7 +319,7 @@ async function verifyCoverage(jobId, pool, k, m, tickets) {
 
   try {
     const n = pool.length
-    const total = C(n, m)
+    const total = nCk(n, m)
     const B = buildBinom(n, m)
 
     // Create a map from actual numbers to indices
@@ -173,6 +389,86 @@ async function verifyCoverage(jobId, pool, k, m, tickets) {
     job.error = error.message
   }
 }
+
+// API: Generate tickets
+app.post('/api/generate-tickets', async (req, res) => {
+  const { pool, k, guarantee, effort, seed, scanCount, mode } = req.body
+
+  if (!pool || !k || !guarantee || !effort || !mode) {
+    return res.status(400).json({ error: 'Missing required parameters' })
+  }
+
+  try {
+    const n = pool.length
+    const m = guarantee
+    let tickets = []
+
+    // Validate pool size
+    if (n < k) {
+      return res.status(400).json({ error: `Pool must have at least ${k} numbers` })
+    }
+
+    // Generate tickets based on mode
+    if (mode === 'universe') {
+      const tot = nCk(n, k)
+      if (tot > UNIVERSE_TICKET_CAP) {
+        return res.status(400).json({
+          error: `Universe mode needs ${tot.toLocaleString()} tickets. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`,
+        })
+      }
+      tickets = exactUniverseTickets(pool, k)
+    } else if (mode === 'universe-m') {
+      const tot = nCk(n, m)
+      if (tot > UNIVERSE_TICKET_CAP) {
+        return res.status(400).json({
+          error: `Universe C(n,m) mode needs ${tot.toLocaleString()} combinations. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`,
+        })
+      }
+      tickets = exactUniverseTickets(pool, m)
+    } else {
+      // greedy, scan, or lb mode
+      let limit = null
+      if (mode === 'scan') {
+        limit = Math.max(1, scanCount)
+      } else if (mode === 'lb') {
+        const stats = calculateWheelStats(n, k, m)
+        limit = stats.lowerBound
+      }
+      const result = greedyWheel(pool, k, m, effort, seed, limit)
+      tickets = result.tickets
+    }
+
+    // Calculate coverage breakdown
+    const coverageBreakdown = calculateCoverageBreakdown(pool, tickets, k)
+
+    res.json({
+      tickets,
+      coverageBreakdown,
+      stats: {
+        ticketCount: tickets.length,
+      },
+    })
+  } catch (error) {
+    console.error('Error generating tickets:', error)
+    res.status(500).json({ error: error.message })
+  }
+})
+
+// API: Calculate statistics
+app.post('/api/calculate-stats', (req, res) => {
+  const { poolSize, k, guarantee } = req.body
+
+  if (!poolSize || !k || !guarantee) {
+    return res.status(400).json({ error: 'Missing required parameters' })
+  }
+
+  try {
+    const stats = calculateWheelStats(poolSize, k, guarantee)
+    res.json(stats)
+  } catch (error) {
+    res.status(500).json({ error: error.message })
+  }
+})
 
 // API: Submit proof verification job
 app.post('/api/verify-proof', async (req, res) => {
