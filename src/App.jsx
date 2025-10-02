@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { GAME_CONFIGS } from './constants/gameConfigs'
 import { CoverageAnalysisTab } from './components/CoverageAnalysisTab'
 import { GameConfigsTab } from './components/GameConfigsTab'
+import { WheelBuilderTab } from './components/WheelBuilderTab'
 
 function App() {
   const [activeTab, setActiveTab] = useState('coverage-analysis')
@@ -124,6 +125,16 @@ function App() {
             >
               Game Configs
             </button>
+            <button
+              onClick={() => setActiveTab('wheel-builder')}
+              className={`px-6 py-3 font-bold text-sm transition-all duration-200 border-b-4 ${
+                activeTab === 'wheel-builder'
+                  ? 'border-cyan-500 text-cyan-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              Wheel Builder
+            </button>
           </div>
         </div>
       </header>
@@ -186,6 +197,9 @@ function App() {
           setCoverageLoadingMessage={setCoverageLoadingMessage}
         />
       )}
+
+      {/* Wheel Builder Tab */}
+      {activeTab === 'wheel-builder' && <WheelBuilderTab gameConfig={gameConfig} />}
     </div>
   )
 }
