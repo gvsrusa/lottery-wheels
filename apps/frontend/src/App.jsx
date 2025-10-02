@@ -87,58 +87,54 @@ function App() {
           </p>
 
           {/* Game Selector */}
-          <div className="mt-4 sm:mt-6 -mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto">
-            <div className="flex gap-2 pb-2 min-w-max sm:min-w-0 sm:flex-wrap">
-              {Object.entries(GAME_CONFIGS).map(([key, config]) => (
-                <button
-                  key={key}
-                  onClick={() => handleGameChange(key)}
-                  className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 whitespace-nowrap min-h-[44px] touch-manipulation ${
-                    selectedGame === key
-                      ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-blue-500/50 scale-105'
-                      : 'bg-slate-800/80 text-slate-300 border-2 border-slate-700 hover:border-blue-500/50 hover:bg-slate-700'
-                  }`}
-                >
-                  {config.name}
-                </button>
-              ))}
-            </div>
+          <div className="mt-4 sm:mt-6 flex flex-wrap gap-2">
+            {Object.entries(GAME_CONFIGS).map(([key, config]) => (
+              <button
+                key={key}
+                onClick={() => handleGameChange(key)}
+                className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 min-h-[44px] touch-manipulation ${
+                  selectedGame === key
+                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-blue-500/50'
+                    : 'bg-slate-800/80 text-slate-300 border-2 border-slate-700 hover:border-blue-500/50 hover:bg-slate-700'
+                }`}
+              >
+                {config.name}
+              </button>
+            ))}
           </div>
 
           {/* Tab Navigation */}
-          <div className="mt-4 sm:mt-6 -mx-4 sm:mx-0 px-4 sm:px-0 overflow-x-auto">
-            <div className="flex gap-1 sm:gap-2 border-b border-slate-700/50 min-w-max sm:min-w-0">
-              <button
-                onClick={() => setActiveTab('wheel-builder')}
-                className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 whitespace-nowrap min-h-[44px] touch-manipulation ${
-                  activeTab === 'wheel-builder'
-                    ? 'border-cyan-500 text-cyan-400'
-                    : 'border-transparent text-slate-400 hover:text-slate-300'
-                }`}
-              >
-                Wheel Builder
-              </button>
-              <button
-                onClick={() => setActiveTab('coverage-analysis')}
-                className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 whitespace-nowrap min-h-[44px] touch-manipulation ${
-                  activeTab === 'coverage-analysis'
-                    ? 'border-cyan-500 text-cyan-400'
-                    : 'border-transparent text-slate-400 hover:text-slate-300'
-                }`}
-              >
-                Coverage Analysis
-              </button>
-              <button
-                onClick={() => setActiveTab('game-configs')}
-                className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 whitespace-nowrap min-h-[44px] touch-manipulation ${
-                  activeTab === 'game-configs'
-                    ? 'border-cyan-500 text-cyan-400'
-                    : 'border-transparent text-slate-400 hover:text-slate-300'
-                }`}
-              >
-                Game Configs
-              </button>
-            </div>
+          <div className="mt-4 sm:mt-6 flex flex-wrap gap-2 border-b border-slate-700/50 pb-0">
+            <button
+              onClick={() => setActiveTab('wheel-builder')}
+              className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 min-h-[44px] touch-manipulation ${
+                activeTab === 'wheel-builder'
+                  ? 'border-cyan-500 text-cyan-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              Wheel Builder
+            </button>
+            <button
+              onClick={() => setActiveTab('coverage-analysis')}
+              className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 min-h-[44px] touch-manipulation ${
+                activeTab === 'coverage-analysis'
+                  ? 'border-cyan-500 text-cyan-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              Coverage Analysis
+            </button>
+            <button
+              onClick={() => setActiveTab('game-configs')}
+              className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 min-h-[44px] touch-manipulation ${
+                activeTab === 'game-configs'
+                  ? 'border-cyan-500 text-cyan-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              Game Configs
+            </button>
           </div>
         </div>
       </header>

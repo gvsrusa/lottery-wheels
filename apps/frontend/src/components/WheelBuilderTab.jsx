@@ -231,13 +231,13 @@ export function WheelBuilderTab({ gameConfig }) {
   }
 
   return (
-    <main className="max-w-[1800px] mx-auto px-4 sm:px-6 py-8 space-y-8">
+    <main className="max-w-[1800px] mx-auto px-3 sm:px-4 md:px-6 py-4 sm:py-6 md:py-8 space-y-4 sm:space-y-6 md:space-y-8">
       {/* Number Selection Card */}
-      <section className="relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-6 shadow-2xl">
-        <h2 className="text-2xl font-bold mb-2 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+      <section className="relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl">
+        <h2 className="text-xl sm:text-2xl font-bold mb-2 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
           Select Your Number Pool
         </h2>
-        <p className="text-slate-400 text-sm mb-4">
+        <p className="text-slate-400 text-xs sm:text-sm mb-4">
           Choose at least {k} numbers from 1-{maxN} for {gameConfig.name}. Selected: {selectedPool.length}
         </p>
 
@@ -308,26 +308,26 @@ export function WheelBuilderTab({ gameConfig }) {
       </section>
 
       {/* Configuration Card */}
-      <section className="relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-6 shadow-2xl">
-        <h2 className="text-2xl font-bold mb-4 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+      <section className="relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl">
+        <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
           Wheel Builder Configuration
         </h2>
-        <p className="text-slate-400 text-sm mb-6">
+        <p className="text-slate-400 text-xs sm:text-sm mb-4 sm:mb-6 leading-relaxed">
           Generate optimized lottery wheels with coverage guarantees. Use <b>Generate</b> for greedy
           wheels, <b>Scan Here</b> for fixed count, <b>Lower Bound</b> for minimal tickets,{' '}
           <b>Universe</b> for all k-combinations, or <b>Universe C(n,m)</b> for all m-subsets.
         </p>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4 mb-4 sm:mb-6">
           {/* Guarantee */}
           <div>
-            <label className="block text-sm font-bold text-slate-300 mb-2">
+            <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-2">
               Guarantee (m of {k})
             </label>
             <select
               value={guarantee}
               onChange={(e) => setGuarantee(parseInt(e.target.value, 10))}
-              className="w-full px-4 py-2 bg-slate-800 border-2 border-slate-700 rounded-xl text-slate-100 focus:border-cyan-500 focus:outline-none"
+              className="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-800 border-2 border-slate-700 rounded-lg sm:rounded-xl text-slate-100 text-sm focus:border-cyan-500 focus:outline-none min-h-[44px]"
             >
               {Array.from({ length: k - 1 }, (_, i) => i + 2).map((m) => (
                 <option key={m} value={m}>
@@ -339,7 +339,7 @@ export function WheelBuilderTab({ gameConfig }) {
 
           {/* Effort */}
           <div>
-            <label className="block text-sm font-bold text-slate-300 mb-2">
+            <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-2">
               Search Effort
             </label>
             <input
@@ -348,14 +348,14 @@ export function WheelBuilderTab({ gameConfig }) {
               step={100}
               value={effort}
               onChange={(e) => setEffort(parseInt(e.target.value, 10))}
-              className="w-full px-4 py-2 bg-slate-800 border-2 border-slate-700 rounded-xl text-slate-100 focus:border-cyan-500 focus:outline-none"
+              className="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-800 border-2 border-slate-700 rounded-lg sm:rounded-xl text-slate-100 text-sm focus:border-cyan-500 focus:outline-none min-h-[44px]"
             />
             <p className="text-xs text-slate-500 mt-1">Higher = better quality</p>
           </div>
 
           {/* Seed */}
           <div>
-            <label className="block text-sm font-bold text-slate-300 mb-2">
+            <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-2">
               Seed (optional)
             </label>
             <input
@@ -363,14 +363,14 @@ export function WheelBuilderTab({ gameConfig }) {
               value={seed}
               onChange={(e) => setSeed(e.target.value)}
               placeholder="random"
-              className="w-full px-4 py-2 bg-slate-800 border-2 border-slate-700 rounded-xl text-slate-100 focus:border-cyan-500 focus:outline-none"
+              className="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-800 border-2 border-slate-700 rounded-lg sm:rounded-xl text-slate-100 text-sm focus:border-cyan-500 focus:outline-none min-h-[44px]"
             />
             <p className="text-xs text-slate-500 mt-1">For reproducibility</p>
           </div>
 
           {/* Scan Count */}
           <div>
-            <label className="block text-sm font-bold text-slate-300 mb-2">
+            <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-2">
               Scan Count
             </label>
             <input
@@ -382,7 +382,7 @@ export function WheelBuilderTab({ gameConfig }) {
                 const val = parseInt(e.target.value, 10)
                 setScanCount(isNaN(val) || val < 1 ? 1 : val)
               }}
-              className="w-full px-4 py-2 bg-slate-800 border-2 border-slate-700 rounded-xl text-slate-100 focus:border-cyan-500 focus:outline-none"
+              className="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-800 border-2 border-slate-700 rounded-lg sm:rounded-xl text-slate-100 text-sm focus:border-cyan-500 focus:outline-none min-h-[44px]"
             />
             <p className="text-xs text-slate-500 mt-1">For "Scan Here" mode</p>
           </div>
@@ -453,7 +453,7 @@ export function WheelBuilderTab({ gameConfig }) {
 
       {/* Statistics */}
       {selectedPool.length >= k && (
-        <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+        <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
           <StatCard label="Pool Size (n)" value={selectedPool.length} />
           <StatCard label="Guarantee" value={`${guarantee} / ${k}`} />
           <StatCard label="Lower Bound (counting)" value={stats.lbCount.toLocaleString()} />
@@ -464,11 +464,11 @@ export function WheelBuilderTab({ gameConfig }) {
 
       {/* Tickets Display */}
       {(tickets.length > 0 || isGenerating) && (
-        <section className={`relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-6 shadow-2xl ${isGenerating ? 'min-h-[500px]' : ''}`}>
+        <section className={`relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl ${isGenerating ? 'min-h-[500px]' : ''}`}>
           {isGenerating && <LoadingOverlay message={loadingMessage} />}
 
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-cyan-400">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 mb-4">
+            <h3 className="text-lg sm:text-xl font-bold text-cyan-400">
               Ticket Set {tickets.length > 0 && `(${tickets.length} tickets)`}
             </h3>
           </div>
@@ -492,13 +492,13 @@ export function WheelBuilderTab({ gameConfig }) {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 p-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 sm:gap-3">
                 {paginatedTickets.map((ticket, i) => {
                   const actualIndex = (currentPage - 1) * ticketsPerPage + i
                   return (
                     <div
                       key={actualIndex}
-                      className="bg-slate-800/60 border border-slate-700 rounded-xl p-3 font-mono text-sm"
+                      className="bg-slate-800/60 border border-slate-700 rounded-lg sm:rounded-xl p-2.5 sm:p-3 font-mono text-xs sm:text-sm"
                     >
                       <span className="text-slate-500">{String(actualIndex + 1).padStart(3, '0')} |</span>{' '}
                       <span className="text-cyan-300 font-semibold">
