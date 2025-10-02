@@ -66,7 +66,7 @@ export function greedyWheel(pool, k, m, effort, seed, limit = null) {
 
   while (true) {
     if (limit != null && tickets.length >= limit) break
-    if (exact && uncovered.size === 0) break
+    if (exact && uncovered.size === 0 && limit === null) break
     if (steps >= maxSteps) break
     steps += 1
 

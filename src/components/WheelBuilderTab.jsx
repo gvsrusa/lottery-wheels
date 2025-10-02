@@ -358,7 +358,10 @@ export function WheelBuilderTab({ gameConfig }) {
               min={1}
               step={1}
               value={scanCount}
-              onChange={(e) => setScanCount(parseInt(e.target.value, 10))}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10)
+                setScanCount(isNaN(val) || val < 1 ? 1 : val)
+              }}
               className="w-full px-4 py-2 bg-slate-800 border-2 border-slate-700 rounded-xl text-slate-100 focus:border-cyan-500 focus:outline-none"
             />
             <p className="text-xs text-slate-500 mt-1">For "Scan Here" mode</p>
