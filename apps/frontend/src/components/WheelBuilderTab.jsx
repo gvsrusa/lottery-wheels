@@ -22,6 +22,7 @@ export function WheelBuilderTab({ gameConfig }) {
   const [proofJobId, setProofJobId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [ticketsPerPage, setTicketsPerPage] = useState(50)
+  const [coverageBreakdown, setCoverageBreakdown] = useState(null)
 
   const k = gameConfig.mainNumbers.pick
   const maxN = gameConfig.mainNumbers.max
