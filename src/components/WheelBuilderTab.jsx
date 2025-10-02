@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { nCk, kCombinations } from '../utils/combinatorics'
+import { nCk } from '../utils/combinatorics'
 import {
   greedyWheel,
   exactUniverseTickets,
@@ -12,8 +12,7 @@ import { StatCard } from './ui/StatCard'
 import { NumberChip } from './ui/NumberChip'
 import { PaginationControls } from './ui/PaginationControls'
 
-// Use relative URLs in production (Vercel), localhost in development
-const API_BASE_URL = import.meta.env.PROD ? '' : 'http://localhost:3001'
+const API_BASE_URL = 'http://localhost:3001'
 
 export function WheelBuilderTab({ gameConfig }) {
   const [selectedPool, setSelectedPool] = useState([])
@@ -28,7 +27,6 @@ export function WheelBuilderTab({ gameConfig }) {
   const [proofJobId, setProofJobId] = useState(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [ticketsPerPage, setTicketsPerPage] = useState(50)
-  const [coverageBreakdown, setCoverageBreakdown] = useState(null)
 
   const k = gameConfig.mainNumbers.pick
   const maxN = gameConfig.mainNumbers.max
@@ -100,41 +98,6 @@ export function WheelBuilderTab({ gameConfig }) {
     }
   }
 
-  // Calculate coverage breakdown
-  const calculateCoverageBreakdown = (pool, tickets, k) => {
-    const breakdown = []
-
-    // For each match level from k down to 2
-    for (let matchLevel = k; matchLevel >= 2; matchLevel--) {
-      // Generate all possible scenarios where exactly matchLevel numbers from pool are drawn
-      const poolSubsets = kCombinations(pool, matchLevel)
-
-      let minWinningTickets = Infinity
-
-      // For each scenario, count how many tickets win
-      for (const drawnFromPool of poolSubsets) {
-        let winningCount = 0
-
-        for (const ticket of tickets) {
-          // Count matches between ticket and drawn pool numbers
-          const matches = ticket.filter(num => drawnFromPool.includes(num)).length
-          if (matches === matchLevel) {
-            winningCount++
-          }
-        }
-
-        minWinningTickets = Math.min(minWinningTickets, winningCount)
-      }
-
-      breakdown.push({
-        level: `${matchLevel}/${k}`,
-        tickets: minWinningTickets === Infinity ? 0 : minWinningTickets,
-      })
-    }
-
-    return breakdown
-  }
-
   // Submit proof verification job
   const verifyProof = async (pool, k, m, tickets) => {
     setProofStatus({ status: 'queued', progress: 0, total: 0 })
@@ -173,7 +136,6 @@ export function WheelBuilderTab({ gameConfig }) {
     setLoadingMessage(`Generating ${mode} tickets...`)
     setProofStatus(null)
     setProofJobId(null)
-    setCoverageBreakdown(null)
 
     try {
       let result
@@ -211,12 +173,6 @@ export function WheelBuilderTab({ gameConfig }) {
 
       setTickets(result)
       setCurrentPage(1) // Reset to first page
-
-      // Calculate coverage breakdown
-      setLoadingMessage('Calculating coverage breakdown...')
-      const breakdown = calculateCoverageBreakdown(selectedPool, result, k)
-      setCoverageBreakdown(breakdown)
-
       setLoadingMessage('Verifying coverage proof...')
 
       // Submit proof verification to backend
@@ -631,49 +587,6 @@ export function WheelBuilderTab({ gameConfig }) {
                   )}
                 </div>
               )}
-            </div>
-          )}
-
-          {/* Coverage Breakdown */}
-          {coverageBreakdown && (
-            <div className="mt-6 bg-slate-800/60 border-2 border-slate-700 rounded-xl p-4">
-              <h4 className="text-lg font-bold text-slate-300 mb-3">
-                Coverage Breakdown
-              </h4>
-              <p className="text-xs text-slate-400 mb-4">
-                Shows the minimum number of winning tickets across all possible draw scenarios from your pool.
-              </p>
-              <div className="border-2 border-slate-700/50 rounded-xl bg-slate-900/60 backdrop-blur-sm shadow-inner overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-slate-800/95 backdrop-blur-md">
-                    <tr className="border-b-2 border-emerald-500/30">
-                      <th className="px-3 sm:px-4 py-3 text-left text-xs font-black uppercase tracking-widest text-slate-300">
-                        Match Level
-                      </th>
-                      <th className="px-3 sm:px-4 py-3 text-right text-xs font-black uppercase tracking-widest text-slate-300">
-                        Min Winning Tickets
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {coverageBreakdown.map((breakdown, idx) => (
-                      <tr
-                        key={`${breakdown.level}-${idx}`}
-                        className={`hover:bg-emerald-500/10 transition-all duration-200 ${
-                          idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'
-                        }`}
-                      >
-                        <td className="px-3 sm:px-4 py-3 text-sm font-bold text-slate-200 border-b border-slate-700/30">
-                          {breakdown.level}
-                        </td>
-                        <td className="px-3 sm:px-4 py-3 text-sm text-right font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500 border-b border-slate-700/30">
-                          {breakdown.tickets.toLocaleString()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
             </div>
           )}
 
