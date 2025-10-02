@@ -12,7 +12,8 @@ import { StatCard } from './ui/StatCard'
 import { NumberChip } from './ui/NumberChip'
 import { PaginationControls } from './ui/PaginationControls'
 
-const API_BASE_URL = 'http://localhost:3001'
+// Use relative URLs in production (Vercel), localhost in development
+const API_BASE_URL = import.meta.env.PROD ? '' : 'http://localhost:3001'
 
 export function WheelBuilderTab({ gameConfig }) {
   const [selectedPool, setSelectedPool] = useState([])
