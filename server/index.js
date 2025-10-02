@@ -97,22 +97,38 @@ function* allComb(n, m) {
 /**
  * Verify coverage proof (background job)
  */
-async function verifyCoverage(jobId, n, k, m, tickets) {
+async function verifyCoverage(jobId, pool, k, m, tickets) {
   const job = proofQueue.get(jobId)
   if (!job) return
 
   try {
+    const n = pool.length
     const total = C(n, m)
     const B = buildBinom(n, m)
-    const rank = makeRank(n, m, B)
+
+    // Create a map from actual numbers to indices
+    const numToIdx = new Map()
+    pool.forEach((num, idx) => numToIdx.set(num, idx))
+
+    // Rank function that works with 0-indexed positions
+    function rankIndices(indices) {
+      let r = 0
+      for (let i = 0; i < m; i += 1) {
+        r += B[indices[i]][i + 1]
+      }
+      return r
+    }
+
     const covered = new Uint8Array(total)
     const idx = combIdx(k, m)
 
     // Mark all covered m-subsets
     for (const t of tickets) {
       for (const id of idx) {
-        const sub = id.map((i) => t[i]).sort((a, b) => a - b)
-        covered[rank(sub)] = 1
+        // Extract m numbers from k-ticket, convert to indices, then rank
+        const subNumbers = id.map((i) => t[i]).sort((a, b) => a - b)
+        const subIndices = subNumbers.map((num) => numToIdx.get(num))
+        covered[rankIndices(subIndices)] = 1
       }
     }
 
@@ -123,11 +139,12 @@ async function verifyCoverage(jobId, n, k, m, tickets) {
     const step = 50000
 
     for (const comb of allComb(n, m)) {
-      const r = rank(comb)
+      const r = rankIndices(comb.map((x) => x - 1)) // allComb generates 1-indexed, need 0-indexed
       if (covered[r] !== 1) {
         uncoveredCount += 1
         if (samples.length < 50) {
-          samples.push(comb.slice())
+          // Convert back to actual numbers for display
+          samples.push(comb.map((idx) => pool[idx - 1]))
         }
       }
       done += 1
@@ -159,9 +176,9 @@ async function verifyCoverage(jobId, n, k, m, tickets) {
 
 // API: Submit proof verification job
 app.post('/api/verify-proof', async (req, res) => {
-  const { n, k, m, tickets } = req.body
+  const { pool, k, m, tickets } = req.body
 
-  if (!n || !k || !m || !tickets) {
+  if (!pool || !k || !m || !tickets) {
     return res.status(400).json({ error: 'Missing required parameters' })
   }
 
@@ -177,7 +194,7 @@ app.post('/api/verify-proof', async (req, res) => {
   })
 
   // Start processing in background
-  verifyCoverage(jobId, n, k, m, tickets)
+  verifyCoverage(jobId, pool, k, m, tickets)
 
   res.json({ jobId })
 })

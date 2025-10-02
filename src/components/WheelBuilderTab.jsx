@@ -9,11 +9,13 @@ import {
 import { toCSV } from '../utils/formatting'
 import { LoadingOverlay } from './ui/LoadingOverlay'
 import { StatCard } from './ui/StatCard'
+import { NumberChip } from './ui/NumberChip'
+import { PaginationControls } from './ui/PaginationControls'
 
 const API_BASE_URL = 'http://localhost:3001'
 
 export function WheelBuilderTab({ gameConfig }) {
-  const [poolSize, setPoolSize] = useState(10)
+  const [selectedPool, setSelectedPool] = useState([])
   const [guarantee, setGuarantee] = useState(3)
   const [effort, setEffort] = useState(1200)
   const [seed, setSeed] = useState('')
@@ -23,16 +25,58 @@ export function WheelBuilderTab({ gameConfig }) {
   const [loadingMessage, setLoadingMessage] = useState('')
   const [proofStatus, setProofStatus] = useState(null)
   const [proofJobId, setProofJobId] = useState(null)
+  const [currentPage, setCurrentPage] = useState(1)
+  const [ticketsPerPage, setTicketsPerPage] = useState(50)
 
   const k = gameConfig.mainNumbers.pick
   const maxN = gameConfig.mainNumbers.max
 
+  // Number range for selection grid
+  const NUMBER_RANGE = Array.from({ length: maxN }, (_, idx) => idx + 1)
+
+  // Toggle number selection
+  const toggleNumber = (num) => {
+    setSelectedPool((prev) =>
+      prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num].sort((a, b) => a - b)
+    )
+  }
+
+  // Clear all selections
+  const clearPool = () => setSelectedPool([])
+
+  // Select all numbers
+  const selectAll = () => setSelectedPool([...NUMBER_RANGE])
+
+  // Quick select random pool
+  const quickSelectRandom = (count) => {
+    const shuffled = [...NUMBER_RANGE].sort(() => Math.random() - 0.5)
+    setSelectedPool(shuffled.slice(0, count).sort((a, b) => a - b))
+  }
+
   // Calculate statistics
   const stats = useMemo(() => {
-    const n = Math.max(k, Math.min(maxN, poolSize))
+    const n = selectedPool.length
     const m = guarantee
+    if (n < k) {
+      return {
+        lbCount: 0,
+        lbSch: 0,
+        lowerBound: 0,
+        universeSize: 0,
+        allTickets: 0,
+      }
+    }
     return calculateWheelStats(n, k, m)
-  }, [poolSize, guarantee, k, maxN])
+  }, [selectedPool, guarantee, k])
+
+  // Paginated tickets
+  const paginatedTickets = useMemo(() => {
+    const startIdx = (currentPage - 1) * ticketsPerPage
+    const endIdx = startIdx + ticketsPerPage
+    return tickets.slice(startIdx, endIdx)
+  }, [tickets, currentPage, ticketsPerPage])
+
+  const totalPages = Math.ceil(tickets.length / ticketsPerPage)
 
   // Poll proof job status
   const pollProofStatus = async (jobId) => {
@@ -55,14 +99,14 @@ export function WheelBuilderTab({ gameConfig }) {
   }
 
   // Submit proof verification job
-  const verifyProof = async (n, k, m, tickets) => {
+  const verifyProof = async (pool, k, m, tickets) => {
     setProofStatus({ status: 'queued', progress: 0, total: 0 })
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/verify-proof`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ n, k, m, tickets }),
+        body: JSON.stringify({ pool, k, m, tickets }),
       })
 
       const { jobId } = await response.json()
@@ -79,8 +123,14 @@ export function WheelBuilderTab({ gameConfig }) {
 
   // Generate tickets
   const handleGenerate = async (mode) => {
-    const n = Math.max(k, Math.min(maxN, poolSize))
+    const n = selectedPool.length
     const m = guarantee
+
+    // Validation
+    if (n < k) {
+      alert(`Please select at least ${k} numbers for ${gameConfig.name}`)
+      return
+    }
 
     setIsGenerating(true)
     setLoadingMessage(`Generating ${mode} tickets...`)
@@ -99,7 +149,7 @@ export function WheelBuilderTab({ gameConfig }) {
           setIsGenerating(false)
           return
         }
-        result = exactUniverseTickets(n, k)
+        result = exactUniverseTickets(selectedPool, k)
       } else {
         let limit = null
         if (mode === 'scan') {
@@ -107,15 +157,16 @@ export function WheelBuilderTab({ gameConfig }) {
         } else if (mode === 'lb') {
           limit = stats.lowerBound
         }
-        const { tickets: generated } = greedyWheel(n, k, m, effort, seed, limit)
+        const { tickets: generated } = greedyWheel(selectedPool, k, m, effort, seed, limit)
         result = generated
       }
 
       setTickets(result)
+      setCurrentPage(1) // Reset to first page
       setLoadingMessage('Verifying coverage proof...')
 
       // Submit proof verification to backend
-      await verifyProof(n, k, m, result)
+      await verifyProof(selectedPool, k, m, result)
     } catch (error) {
       console.error('Error generating tickets:', error)
       alert(`Error: ${error.message}`)
@@ -161,6 +212,81 @@ export function WheelBuilderTab({ gameConfig }) {
     <main className="relative max-w-[1800px] mx-auto px-4 sm:px-6 py-8 space-y-8">
       {isGenerating && <LoadingOverlay message={loadingMessage} />}
 
+      {/* Number Selection Card */}
+      <section className="relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-6 shadow-2xl">
+        <h2 className="text-2xl font-bold mb-2 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
+          Select Your Number Pool
+        </h2>
+        <p className="text-slate-400 text-sm mb-4">
+          Choose at least {k} numbers from 1-{maxN} for {gameConfig.name}. Selected: {selectedPool.length}
+        </p>
+
+        {/* Quick Actions */}
+        <div className="flex flex-wrap gap-2 mb-4">
+          <button
+            onClick={() => quickSelectRandom(10)}
+            className="px-4 py-2 bg-slate-700 text-white text-sm font-bold rounded-xl hover:bg-slate-600 transition-all"
+          >
+            Quick: 10 Random
+          </button>
+          <button
+            onClick={() => quickSelectRandom(15)}
+            className="px-4 py-2 bg-slate-700 text-white text-sm font-bold rounded-xl hover:bg-slate-600 transition-all"
+          >
+            Quick: 15 Random
+          </button>
+          <button
+            onClick={() => quickSelectRandom(20)}
+            className="px-4 py-2 bg-slate-700 text-white text-sm font-bold rounded-xl hover:bg-slate-600 transition-all"
+          >
+            Quick: 20 Random
+          </button>
+          <button
+            onClick={selectAll}
+            className="px-4 py-2 bg-slate-700 text-white text-sm font-bold rounded-xl hover:bg-slate-600 transition-all"
+          >
+            Select All
+          </button>
+          <button
+            onClick={clearPool}
+            className="px-4 py-2 bg-red-700 text-white text-sm font-bold rounded-xl hover:bg-red-600 transition-all"
+          >
+            Clear All
+          </button>
+        </div>
+
+        {/* Number Grid */}
+        <div className="grid grid-cols-7 sm:grid-cols-10 md:grid-cols-12 lg:grid-cols-14 xl:grid-cols-17 gap-2">
+          {NUMBER_RANGE.map((num) => (
+            <NumberChip
+              key={num}
+              number={num}
+              selected={selectedPool.includes(num)}
+              onToggle={() => toggleNumber(num)}
+            />
+          ))}
+        </div>
+
+        {/* Selected Numbers Display */}
+        {selectedPool.length > 0 && (
+          <div className="mt-4 p-4 bg-slate-800/60 border border-slate-700 rounded-xl">
+            <p className="text-sm font-bold text-slate-300 mb-2">
+              Selected Pool ({selectedPool.length} numbers):
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {selectedPool.map((num) => (
+                <span
+                  key={num}
+                  className="inline-flex items-center justify-center w-10 h-10 bg-gradient-to-br from-cyan-500 to-blue-600 text-white font-bold rounded-lg shadow-lg"
+                >
+                  {num}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+
       {/* Configuration Card */}
       <section className="relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-6 shadow-2xl">
         <h2 className="text-2xl font-bold mb-4 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
@@ -173,24 +299,6 @@ export function WheelBuilderTab({ gameConfig }) {
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
-          {/* Pool Size */}
-          <div>
-            <label className="block text-sm font-bold text-slate-300 mb-2">
-              Pool Size (n)
-            </label>
-            <input
-              type="number"
-              min={k}
-              max={maxN}
-              value={poolSize}
-              onChange={(e) => setPoolSize(parseInt(e.target.value, 10))}
-              className="w-full px-4 py-2 bg-slate-800 border-2 border-slate-700 rounded-xl text-slate-100 focus:border-cyan-500 focus:outline-none"
-            />
-            <p className="text-xs text-slate-500 mt-1">
-              Range: {k} to {maxN}
-            </p>
-          </div>
-
           {/* Guarantee */}
           <div>
             <label className="block text-sm font-bold text-slate-300 mb-2">
@@ -261,28 +369,28 @@ export function WheelBuilderTab({ gameConfig }) {
         <div className="flex flex-wrap gap-3">
           <button
             onClick={() => handleGenerate('greedy')}
-            disabled={isGenerating}
+            disabled={isGenerating || selectedPool.length < k}
             className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-bold rounded-xl shadow-lg hover:shadow-cyan-500/50 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             Generate
           </button>
           <button
             onClick={() => handleGenerate('scan')}
-            disabled={isGenerating}
+            disabled={isGenerating || selectedPool.length < k}
             className="px-6 py-3 bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             Scan Here
           </button>
           <button
             onClick={() => handleGenerate('lb')}
-            disabled={isGenerating}
+            disabled={isGenerating || selectedPool.length < k}
             className="px-6 py-3 bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             Lower Bound
           </button>
           <button
             onClick={() => handleGenerate('universe')}
-            disabled={isGenerating}
+            disabled={isGenerating || selectedPool.length < k}
             className="px-6 py-3 bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             Universe
@@ -305,32 +413,24 @@ export function WheelBuilderTab({ gameConfig }) {
             Copy
           </button>
         </div>
+
+        {selectedPool.length < k && (
+          <p className="mt-4 text-yellow-400 text-sm font-semibold">
+            ⚠️ Please select at least {k} numbers to generate tickets.
+          </p>
+        )}
       </section>
 
       {/* Statistics */}
-      <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-        <StatCard
-          label="Pool Size (n)"
-          value={Math.max(k, Math.min(maxN, poolSize))}
-        />
-        <StatCard
-          label="Guarantee"
-          value={`${guarantee} / ${k}`}
-        />
-        <StatCard
-          label="Lower Bound (counting)"
-          value={stats.lbCount.toLocaleString()}
-        />
-        <StatCard
-          label="Lower Bound (Schönheim)"
-          value={stats.lbSch.toLocaleString()}
-        />
-        <StatCard
-          label="Universe C(n,m)"
-          value={stats.universeSize.toLocaleString()}
-          hint="m-subsets"
-        />
-      </section>
+      {selectedPool.length >= k && (
+        <section className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+          <StatCard label="Pool Size (n)" value={selectedPool.length} />
+          <StatCard label="Guarantee" value={`${guarantee} / ${k}`} />
+          <StatCard label="Lower Bound (counting)" value={stats.lbCount.toLocaleString()} />
+          <StatCard label="Lower Bound (Schönheim)" value={stats.lbSch.toLocaleString()} />
+          <StatCard label="Universe C(n,m)" value={stats.universeSize.toLocaleString()} hint="m-subsets" />
+        </section>
+      )}
 
       {/* Tickets Display */}
       {tickets.length > 0 && (
@@ -341,19 +441,56 @@ export function WheelBuilderTab({ gameConfig }) {
             </h3>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 max-h-[600px] overflow-y-auto p-2">
-            {tickets.map((ticket, i) => (
-              <div
-                key={i}
-                className="bg-slate-800/60 border border-slate-700 rounded-xl p-3 font-mono text-sm"
-              >
-                <span className="text-slate-500">{String(i + 1).padStart(3, '0')} |</span>{' '}
-                <span className="text-cyan-300 font-semibold">
-                  {ticket.map((n) => String(n).padStart(2, ' ')).join(' ')}
-                </span>
-              </div>
-            ))}
+          {/* Pagination Controls - Top */}
+          {totalPages > 1 && (
+            <div className="mb-4">
+              <PaginationControls
+                currentPage={currentPage}
+                totalPages={totalPages}
+                rowsPerPage={ticketsPerPage}
+                totalRows={tickets.length}
+                onPageChange={setCurrentPage}
+                onRowsPerPageChange={(newValue) => {
+                  setTicketsPerPage(newValue)
+                  setCurrentPage(1)
+                }}
+              />
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 p-2">
+            {paginatedTickets.map((ticket, i) => {
+              const actualIndex = (currentPage - 1) * ticketsPerPage + i
+              return (
+                <div
+                  key={actualIndex}
+                  className="bg-slate-800/60 border border-slate-700 rounded-xl p-3 font-mono text-sm"
+                >
+                  <span className="text-slate-500">{String(actualIndex + 1).padStart(3, '0')} |</span>{' '}
+                  <span className="text-cyan-300 font-semibold">
+                    {ticket.map((n) => String(n).padStart(2, ' ')).join(' ')}
+                  </span>
+                </div>
+              )
+            })}
           </div>
+
+          {/* Pagination Controls - Bottom */}
+          {totalPages > 1 && (
+            <div className="mt-4">
+              <PaginationControls
+                currentPage={currentPage}
+                totalPages={totalPages}
+                rowsPerPage={ticketsPerPage}
+                totalRows={tickets.length}
+                onPageChange={setCurrentPage}
+                onRowsPerPageChange={(newValue) => {
+                  setTicketsPerPage(newValue)
+                  setCurrentPage(1)
+                }}
+              />
+            </div>
+          )}
 
           {/* Proof Status */}
           {proofStatus && (

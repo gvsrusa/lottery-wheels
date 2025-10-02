@@ -13,7 +13,7 @@ const UNIVERSE_TICKET_CAP = 100_000
 
 /**
  * Generate a greedy lottery wheel
- * @param {number} n - Pool size
+ * @param {Array<number>} pool - Array of selected numbers
  * @param {number} k - Pick size (numbers per ticket)
  * @param {number} m - Guarantee level (m of k guaranteed)
  * @param {number} effort - Search effort (iterations per ticket)
@@ -21,9 +21,9 @@ const UNIVERSE_TICKET_CAP = 100_000
  * @param {number|null} limit - Maximum number of tickets (null for unlimited)
  * @returns {Object} - { tickets: Array<Array<number>> }
  */
-export function greedyWheel(n, k, m, effort, seed, limit = null) {
+export function greedyWheel(pool, k, m, effort, seed, limit = null) {
   const rand = makeLCG(hashSeed(seed))
-  const base = Array.from({ length: n }, (_, i) => i + 1)
+  const n = pool.length
   const totalM = nCk(n, m)
   const exact = totalM <= HARD_EXACT_BUILD
 
@@ -34,7 +34,7 @@ export function greedyWheel(n, k, m, effort, seed, limit = null) {
   )
 
   if (exact) {
-    uncovered = new Set(kCombinations(base, m).map(serialize))
+    uncovered = new Set(kCombinations(pool, m).map(serialize))
   }
 
   const tickets = []
@@ -54,6 +54,16 @@ export function greedyWheel(n, k, m, effort, seed, limit = null) {
     return g
   }
 
+  function randomKTicketFromPool(rand) {
+    const indices = new Set()
+    while (indices.size < k) {
+      indices.add(Math.floor(rand() * n))
+    }
+    return Array.from(indices)
+      .sort((a, b) => a - b)
+      .map((i) => pool[i])
+  }
+
   while (true) {
     if (limit != null && tickets.length >= limit) break
     if (exact && uncovered.size === 0) break
@@ -64,7 +74,7 @@ export function greedyWheel(n, k, m, effort, seed, limit = null) {
     let bestGain = -1
 
     for (let i = 0; i < effort; i += 1) {
-      const cand = randomKTicket(n, k, rand)
+      const cand = randomKTicketFromPool(rand)
       const key = serialize(cand)
       if (seen.has(key)) continue
 
@@ -76,7 +86,7 @@ export function greedyWheel(n, k, m, effort, seed, limit = null) {
       }
     }
 
-    if (!best) best = randomKTicket(n, k, rand)
+    if (!best) best = randomKTicketFromPool(rand)
 
     tickets.push(best)
     seen.add(serialize(best))
@@ -94,13 +104,12 @@ export function greedyWheel(n, k, m, effort, seed, limit = null) {
 
 /**
  * Generate all possible tickets (universe mode)
- * @param {number} n - Pool size
+ * @param {Array<number>} pool - Array of selected numbers
  * @param {number} k - Pick size
  * @returns {Array<Array<number>>} - All possible k-tickets
  */
-export function exactUniverseTickets(n, k) {
-  const base = Array.from({ length: n }, (_, i) => i + 1)
-  return kCombinations(base, k)
+export function exactUniverseTickets(pool, k) {
+  return kCombinations(pool, k)
 }
 
 /**
