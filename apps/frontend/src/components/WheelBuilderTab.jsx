@@ -7,7 +7,7 @@ import { StatCard } from './ui/StatCard'
 import { NumberChip } from './ui/NumberChip'
 import { PaginationControls } from './ui/PaginationControls'
 
-const API_BASE_URL = 'http://localhost:3001'
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 export function WheelBuilderTab({ gameConfig }) {
   const [selectedPool, setSelectedPool] = useState([])
