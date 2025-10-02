@@ -150,6 +150,16 @@ export function WheelBuilderTab({ gameConfig }) {
           return
         }
         result = exactUniverseTickets(selectedPool, k)
+      } else if (mode === 'universe-m') {
+        const tot = nCk(n, m)
+        if (tot > UNIVERSE_TICKET_CAP) {
+          alert(
+            `Universe C(n,m) mode needs ${tot.toLocaleString()} combinations. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`
+          )
+          setIsGenerating(false)
+          return
+        }
+        result = exactUniverseTickets(selectedPool, m)
       } else {
         let limit = null
         if (mode === 'scan') {
@@ -294,8 +304,8 @@ export function WheelBuilderTab({ gameConfig }) {
         </h2>
         <p className="text-slate-400 text-sm mb-6">
           Generate optimized lottery wheels with coverage guarantees. Use <b>Generate</b> for greedy
-          wheels, <b>Scan Here</b> for fixed count, <b>Lower Bound</b> for minimal tickets, or{' '}
-          <b>Universe</b> for all combinations.
+          wheels, <b>Scan Here</b> for fixed count, <b>Lower Bound</b> for minimal tickets,{' '}
+          <b>Universe</b> for all k-combinations, or <b>Universe C(n,m)</b> for all m-subsets.
         </p>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-6">
@@ -397,6 +407,13 @@ export function WheelBuilderTab({ gameConfig }) {
             className="px-6 py-3 bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
           >
             Universe
+          </button>
+          <button
+            onClick={() => handleGenerate('universe-m')}
+            disabled={isGenerating || selectedPool.length < guarantee}
+            className="px-6 py-3 bg-slate-700 text-white font-bold rounded-xl hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+          >
+            Universe C(n,m)
           </button>
 
           <div className="flex-1"></div>

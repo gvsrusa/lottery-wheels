@@ -5,7 +5,7 @@ import { GameConfigsTab } from './components/GameConfigsTab'
 import { WheelBuilderTab } from './components/WheelBuilderTab'
 
 function App() {
-  const [activeTab, setActiveTab] = useState('coverage-analysis')
+  const [activeTab, setActiveTab] = useState('wheel-builder')
   const [selectedGame, setSelectedGame] = useState('texas-two-step')
   const [pool, setPool] = useState([])
   const [bonusCandidates, setBonusCandidates] = useState([])
@@ -106,6 +106,16 @@ function App() {
           {/* Tab Navigation */}
           <div className="mt-6 flex gap-2 border-b border-slate-700/50">
             <button
+              onClick={() => setActiveTab('wheel-builder')}
+              className={`px-6 py-3 font-bold text-sm transition-all duration-200 border-b-4 ${
+                activeTab === 'wheel-builder'
+                  ? 'border-cyan-500 text-cyan-400'
+                  : 'border-transparent text-slate-400 hover:text-slate-300'
+              }`}
+            >
+              Wheel Builder
+            </button>
+            <button
               onClick={() => setActiveTab('coverage-analysis')}
               className={`px-6 py-3 font-bold text-sm transition-all duration-200 border-b-4 ${
                 activeTab === 'coverage-analysis'
@@ -124,16 +134,6 @@ function App() {
               }`}
             >
               Game Configs
-            </button>
-            <button
-              onClick={() => setActiveTab('wheel-builder')}
-              className={`px-6 py-3 font-bold text-sm transition-all duration-200 border-b-4 ${
-                activeTab === 'wheel-builder'
-                  ? 'border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-300'
-              }`}
-            >
-              Wheel Builder
             </button>
           </div>
         </div>
