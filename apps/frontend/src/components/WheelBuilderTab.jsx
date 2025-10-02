@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { nCk } from '../utils/combinatorics'
 import { calculateWheelStats } from '../utils/wheelBuilder'
 import { toCSV } from '../utils/formatting'
@@ -30,6 +30,20 @@ export function WheelBuilderTab({ gameConfig }) {
   // Number range for selection grid
   const NUMBER_RANGE = Array.from({ length: maxN }, (_, idx) => idx + 1)
 
+  // Reset state when game changes
+  useEffect(() => {
+    setSelectedPool([])
+    setTickets([])
+    setIsGenerating(false)
+    setLoadingMessage('')
+    setProofStatus(null)
+    setProofJobId(null)
+    setCoverageBreakdown(null)
+    setCurrentPage(1)
+    setGuarantee(3)
+    setSeed('')
+  }, [gameConfig])
+
   // Toggle number selection
   const toggleNumber = (num) => {
     setSelectedPool((prev) =>
@@ -37,8 +51,17 @@ export function WheelBuilderTab({ gameConfig }) {
     )
   }
 
-  // Clear all selections
-  const clearPool = () => setSelectedPool([])
+  // Clear all selections and reset state
+  const clearPool = () => {
+    setSelectedPool([])
+    setTickets([])
+    setIsGenerating(false)
+    setLoadingMessage('')
+    setProofStatus(null)
+    setProofJobId(null)
+    setCoverageBreakdown(null)
+    setCurrentPage(1)
+  }
 
   // Select all numbers
   const selectAll = () => setSelectedPool([...NUMBER_RANGE])
