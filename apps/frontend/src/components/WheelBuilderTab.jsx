@@ -1,18 +1,13 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { nCk } from '../utils/combinatorics'
-import {
-  greedyWheel,
-  exactUniverseTickets,
-  calculateWheelStats,
-  UNIVERSE_TICKET_CAP,
-} from '../utils/wheelBuilder'
+import { calculateWheelStats } from '../utils/wheelBuilder'
 import { toCSV } from '../utils/formatting'
 import { LoadingOverlay } from './ui/LoadingOverlay'
 import { StatCard } from './ui/StatCard'
 import { NumberChip } from './ui/NumberChip'
 import { PaginationControls } from './ui/PaginationControls'
 
-const API_BASE_URL = 'http://localhost:3001'
+const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 export function WheelBuilderTab({ gameConfig }) {
   const [selectedPool, setSelectedPool] = useState([])
@@ -34,6 +29,20 @@ export function WheelBuilderTab({ gameConfig }) {
   // Number range for selection grid
   const NUMBER_RANGE = Array.from({ length: maxN }, (_, idx) => idx + 1)
 
+  // Reset state when game changes
+  useEffect(() => {
+    setSelectedPool([])
+    setTickets([])
+    setIsGenerating(false)
+    setLoadingMessage('')
+    setProofStatus(null)
+    setProofJobId(null)
+    setCoverageBreakdown(null)
+    setCurrentPage(1)
+    setGuarantee(3)
+    setSeed('')
+  }, [gameConfig])
+
   // Toggle number selection
   const toggleNumber = (num) => {
     setSelectedPool((prev) =>
@@ -41,8 +50,17 @@ export function WheelBuilderTab({ gameConfig }) {
     )
   }
 
-  // Clear all selections
-  const clearPool = () => setSelectedPool([])
+  // Clear all selections and reset state
+  const clearPool = () => {
+    setSelectedPool([])
+    setTickets([])
+    setIsGenerating(false)
+    setLoadingMessage('')
+    setProofStatus(null)
+    setProofJobId(null)
+    setCoverageBreakdown(null)
+    setCurrentPage(1)
+  }
 
   // Select all numbers
   const selectAll = () => setSelectedPool([...NUMBER_RANGE])
@@ -138,48 +156,41 @@ export function WheelBuilderTab({ gameConfig }) {
     setProofJobId(null)
 
     try {
-      let result
+      // Call backend API to generate tickets
+      const response = await fetch(`${API_BASE_URL}/api/generate-tickets`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          pool: selectedPool,
+          k,
+          guarantee: m,
+          effort,
+          seed,
+          scanCount,
+          mode,
+        }),
+      })
 
-      if (mode === 'universe') {
-        const tot = nCk(n, k)
-        if (tot > UNIVERSE_TICKET_CAP) {
-          alert(
-            `Universe mode needs ${tot.toLocaleString()} tickets. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`
-          )
-          setIsGenerating(false)
-          return
-        }
-        result = exactUniverseTickets(selectedPool, k)
-      } else if (mode === 'universe-m') {
-        const tot = nCk(n, m)
-        if (tot > UNIVERSE_TICKET_CAP) {
-          alert(
-            `Universe C(n,m) mode needs ${tot.toLocaleString()} combinations. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`
-          )
-          setIsGenerating(false)
-          return
-        }
-        result = exactUniverseTickets(selectedPool, m)
-      } else {
-        let limit = null
-        if (mode === 'scan') {
-          limit = Math.max(1, scanCount)
-        } else if (mode === 'lb') {
-          limit = stats.lowerBound
-        }
-        const { tickets: generated } = greedyWheel(selectedPool, k, m, effort, seed, limit)
-        result = generated
+      if (!response.ok) {
+        const errorData = await response.json()
+        alert(errorData.error || 'Failed to generate tickets')
+        setIsGenerating(false)
+        return
       }
 
-      setTickets(result)
+      const data = await response.json()
+
+      setTickets(data.tickets)
+      setCoverageBreakdown(data.coverageBreakdown)
       setCurrentPage(1) // Reset to first page
+
       setLoadingMessage('Verifying coverage proof...')
 
       // Submit proof verification to backend
-      await verifyProof(selectedPool, k, m, result)
+      await verifyProof(selectedPool, k, m, data.tickets)
     } catch (error) {
       console.error('Error generating tickets:', error)
-      alert(`Error: ${error.message}`)
+      alert(`Error: ${error.message}. Make sure to run: npm run dev:server`)
     } finally {
       setIsGenerating(false)
       setLoadingMessage('')
@@ -219,9 +230,7 @@ export function WheelBuilderTab({ gameConfig }) {
   }
 
   return (
-    <main className="relative max-w-[1800px] mx-auto px-4 sm:px-6 py-8 space-y-8">
-      {isGenerating && <LoadingOverlay message={loadingMessage} />}
-
+    <main className="max-w-[1800px] mx-auto px-4 sm:px-6 py-8 space-y-8">
       {/* Number Selection Card */}
       <section className="relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-6 shadow-2xl">
         <h2 className="text-2xl font-bold mb-2 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
@@ -453,67 +462,73 @@ export function WheelBuilderTab({ gameConfig }) {
       )}
 
       {/* Tickets Display */}
-      {tickets.length > 0 && (
-        <section className="relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-6 shadow-2xl">
+      {(tickets.length > 0 || isGenerating) && (
+        <section className={`relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-6 shadow-2xl ${isGenerating ? 'min-h-[500px]' : ''}`}>
+          {isGenerating && <LoadingOverlay message={loadingMessage} />}
+
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-bold text-cyan-400">
-              Ticket Set ({tickets.length} tickets)
+              Ticket Set {tickets.length > 0 && `(${tickets.length} tickets)`}
             </h3>
           </div>
 
-          {/* Pagination Controls - Top */}
-          {totalPages > 1 && (
-            <div className="mb-4">
-              <PaginationControls
-                currentPage={currentPage}
-                totalPages={totalPages}
-                rowsPerPage={ticketsPerPage}
-                totalRows={tickets.length}
-                onPageChange={setCurrentPage}
-                onRowsPerPageChange={(newValue) => {
-                  setTicketsPerPage(newValue)
-                  setCurrentPage(1)
-                }}
-              />
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 p-2">
-            {paginatedTickets.map((ticket, i) => {
-              const actualIndex = (currentPage - 1) * ticketsPerPage + i
-              return (
-                <div
-                  key={actualIndex}
-                  className="bg-slate-800/60 border border-slate-700 rounded-xl p-3 font-mono text-sm"
-                >
-                  <span className="text-slate-500">{String(actualIndex + 1).padStart(3, '0')} |</span>{' '}
-                  <span className="text-cyan-300 font-semibold">
-                    {ticket.map((n) => String(n).padStart(2, ' ')).join(' ')}
-                  </span>
+          {!isGenerating && tickets.length > 0 && (
+            <>
+              {/* Pagination Controls - Top */}
+              {totalPages > 1 && (
+                <div className="mb-4">
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    rowsPerPage={ticketsPerPage}
+                    totalRows={tickets.length}
+                    onPageChange={setCurrentPage}
+                    onRowsPerPageChange={(newValue) => {
+                      setTicketsPerPage(newValue)
+                      setCurrentPage(1)
+                    }}
+                  />
                 </div>
-              )
-            })}
-          </div>
+              )}
 
-          {/* Pagination Controls - Bottom */}
-          {totalPages > 1 && (
-            <div className="mt-4">
-              <PaginationControls
-                currentPage={currentPage}
-                totalPages={totalPages}
-                rowsPerPage={ticketsPerPage}
-                totalRows={tickets.length}
-                onPageChange={setCurrentPage}
-                onRowsPerPageChange={(newValue) => {
-                  setTicketsPerPage(newValue)
-                  setCurrentPage(1)
-                }}
-              />
-            </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 p-2">
+                {paginatedTickets.map((ticket, i) => {
+                  const actualIndex = (currentPage - 1) * ticketsPerPage + i
+                  return (
+                    <div
+                      key={actualIndex}
+                      className="bg-slate-800/60 border border-slate-700 rounded-xl p-3 font-mono text-sm"
+                    >
+                      <span className="text-slate-500">{String(actualIndex + 1).padStart(3, '0')} |</span>{' '}
+                      <span className="text-cyan-300 font-semibold">
+                        {ticket.map((n) => String(n).padStart(2, ' ')).join(' ')}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Pagination Controls - Bottom */}
+              {totalPages > 1 && (
+                <div className="mt-4">
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    rowsPerPage={ticketsPerPage}
+                    totalRows={tickets.length}
+                    onPageChange={setCurrentPage}
+                    onRowsPerPageChange={(newValue) => {
+                      setTicketsPerPage(newValue)
+                      setCurrentPage(1)
+                    }}
+                  />
+                </div>
+              )}
+            </>
           )}
 
           {/* Proof Status */}
-          {proofStatus && (
+          {!isGenerating && proofStatus && (
             <div className="mt-6 bg-slate-800/60 border-2 border-slate-700 rounded-xl p-4">
               <h4 className="text-lg font-bold text-slate-300 mb-2">
                 Coverage Proof Verification
@@ -587,6 +602,49 @@ export function WheelBuilderTab({ gameConfig }) {
                   )}
                 </div>
               )}
+            </div>
+          )}
+
+          {/* Coverage Breakdown */}
+          {!isGenerating && coverageBreakdown && (
+            <div className="mt-6 bg-slate-800/60 border-2 border-slate-700 rounded-xl p-4">
+              <h4 className="text-lg font-bold text-slate-300 mb-3">
+                Coverage Breakdown
+              </h4>
+              <p className="text-xs text-slate-400 mb-4">
+                Shows the minimum number of winning tickets across all possible draw scenarios from your pool.
+              </p>
+              <div className="border-2 border-slate-700/50 rounded-xl bg-slate-900/60 backdrop-blur-sm shadow-inner overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-slate-800/95 backdrop-blur-md">
+                    <tr className="border-b-2 border-emerald-500/30">
+                      <th className="px-3 sm:px-4 py-3 text-left text-xs font-black uppercase tracking-widest text-slate-300">
+                        Match Level
+                      </th>
+                      <th className="px-3 sm:px-4 py-3 text-right text-xs font-black uppercase tracking-widest text-slate-300">
+                        Min Winning Tickets
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {coverageBreakdown.map((breakdown, idx) => (
+                      <tr
+                        key={`${breakdown.level}-${idx}`}
+                        className={`hover:bg-emerald-500/10 transition-all duration-200 ${
+                          idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'
+                        }`}
+                      >
+                        <td className="px-3 sm:px-4 py-3 text-sm font-bold text-slate-200 border-b border-slate-700/30">
+                          {breakdown.level}
+                        </td>
+                        <td className="px-3 sm:px-4 py-3 text-sm text-right font-black text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-green-500 border-b border-slate-700/30">
+                          {breakdown.tickets.toLocaleString()}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
