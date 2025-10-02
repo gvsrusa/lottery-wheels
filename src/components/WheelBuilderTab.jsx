@@ -209,9 +209,7 @@ export function WheelBuilderTab({ gameConfig }) {
   }
 
   return (
-    <main className="relative max-w-[1800px] mx-auto px-4 sm:px-6 py-8 space-y-8">
-      {isGenerating && <LoadingOverlay message={loadingMessage} />}
-
+    <main className="max-w-[1800px] mx-auto px-4 sm:px-6 py-8 space-y-8">
       {/* Number Selection Card */}
       <section className="relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-6 shadow-2xl">
         <h2 className="text-2xl font-bold mb-2 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
@@ -443,67 +441,73 @@ export function WheelBuilderTab({ gameConfig }) {
       )}
 
       {/* Tickets Display */}
-      {tickets.length > 0 && (
-        <section className="relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-6 shadow-2xl">
+      {(tickets.length > 0 || isGenerating) && (
+        <section className={`relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-3xl p-6 shadow-2xl ${isGenerating ? 'min-h-[500px]' : ''}`}>
+          {isGenerating && <LoadingOverlay message={loadingMessage} />}
+
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-xl font-bold text-cyan-400">
-              Ticket Set ({tickets.length} tickets)
+              Ticket Set {tickets.length > 0 && `(${tickets.length} tickets)`}
             </h3>
           </div>
 
-          {/* Pagination Controls - Top */}
-          {totalPages > 1 && (
-            <div className="mb-4">
-              <PaginationControls
-                currentPage={currentPage}
-                totalPages={totalPages}
-                rowsPerPage={ticketsPerPage}
-                totalRows={tickets.length}
-                onPageChange={setCurrentPage}
-                onRowsPerPageChange={(newValue) => {
-                  setTicketsPerPage(newValue)
-                  setCurrentPage(1)
-                }}
-              />
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 p-2">
-            {paginatedTickets.map((ticket, i) => {
-              const actualIndex = (currentPage - 1) * ticketsPerPage + i
-              return (
-                <div
-                  key={actualIndex}
-                  className="bg-slate-800/60 border border-slate-700 rounded-xl p-3 font-mono text-sm"
-                >
-                  <span className="text-slate-500">{String(actualIndex + 1).padStart(3, '0')} |</span>{' '}
-                  <span className="text-cyan-300 font-semibold">
-                    {ticket.map((n) => String(n).padStart(2, ' ')).join(' ')}
-                  </span>
+          {!isGenerating && tickets.length > 0 && (
+            <>
+              {/* Pagination Controls - Top */}
+              {totalPages > 1 && (
+                <div className="mb-4">
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    rowsPerPage={ticketsPerPage}
+                    totalRows={tickets.length}
+                    onPageChange={setCurrentPage}
+                    onRowsPerPageChange={(newValue) => {
+                      setTicketsPerPage(newValue)
+                      setCurrentPage(1)
+                    }}
+                  />
                 </div>
-              )
-            })}
-          </div>
+              )}
 
-          {/* Pagination Controls - Bottom */}
-          {totalPages > 1 && (
-            <div className="mt-4">
-              <PaginationControls
-                currentPage={currentPage}
-                totalPages={totalPages}
-                rowsPerPage={ticketsPerPage}
-                totalRows={tickets.length}
-                onPageChange={setCurrentPage}
-                onRowsPerPageChange={(newValue) => {
-                  setTicketsPerPage(newValue)
-                  setCurrentPage(1)
-                }}
-              />
-            </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-3 p-2">
+                {paginatedTickets.map((ticket, i) => {
+                  const actualIndex = (currentPage - 1) * ticketsPerPage + i
+                  return (
+                    <div
+                      key={actualIndex}
+                      className="bg-slate-800/60 border border-slate-700 rounded-xl p-3 font-mono text-sm"
+                    >
+                      <span className="text-slate-500">{String(actualIndex + 1).padStart(3, '0')} |</span>{' '}
+                      <span className="text-cyan-300 font-semibold">
+                        {ticket.map((n) => String(n).padStart(2, ' ')).join(' ')}
+                      </span>
+                    </div>
+                  )
+                })}
+              </div>
+
+              {/* Pagination Controls - Bottom */}
+              {totalPages > 1 && (
+                <div className="mt-4">
+                  <PaginationControls
+                    currentPage={currentPage}
+                    totalPages={totalPages}
+                    rowsPerPage={ticketsPerPage}
+                    totalRows={tickets.length}
+                    onPageChange={setCurrentPage}
+                    onRowsPerPageChange={(newValue) => {
+                      setTicketsPerPage(newValue)
+                      setCurrentPage(1)
+                    }}
+                  />
+                </div>
+              )}
+            </>
           )}
 
           {/* Proof Status */}
-          {proofStatus && (
+          {!isGenerating && proofStatus && (
             <div className="mt-6 bg-slate-800/60 border-2 border-slate-700 rounded-xl p-4">
               <h4 className="text-lg font-bold text-slate-300 mb-2">
                 Coverage Proof Verification
@@ -581,7 +585,7 @@ export function WheelBuilderTab({ gameConfig }) {
           )}
 
           {/* Coverage Breakdown */}
-          {coverageBreakdown && (
+          {!isGenerating && coverageBreakdown && (
             <div className="mt-6 bg-slate-800/60 border-2 border-slate-700 rounded-xl p-4">
               <h4 className="text-lg font-bold text-slate-300 mb-3">
                 Coverage Breakdown
