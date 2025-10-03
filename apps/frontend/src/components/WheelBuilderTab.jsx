@@ -11,6 +11,8 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 export function WheelBuilderTab({ gameConfig }) {
   const [selectedPool, setSelectedPool] = useState([])
+  const [inputMode, setInputMode] = useState('grid') // 'grid' or 'text'
+  const [textInput, setTextInput] = useState('')
   const [guarantee, setGuarantee] = useState(3)
   const [effort, setEffort] = useState(1200)
   const [seed, setSeed] = useState('')
@@ -51,9 +53,38 @@ export function WheelBuilderTab({ gameConfig }) {
     )
   }
 
+  // Handle text input parsing
+  const handleTextInputChange = (e) => {
+    const value = e.target.value
+    setTextInput(value)
+
+    // Parse comma-separated numbers
+    const numbers = value
+      .split(',')
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => !isNaN(n) && n >= 1 && n <= maxN)
+      .filter((n, idx, arr) => arr.indexOf(n) === idx) // Remove duplicates
+      .sort((a, b) => a - b)
+
+    setSelectedPool(numbers)
+  }
+
+  // Apply text input to pool
+  const applyTextInput = () => {
+    const numbers = textInput
+      .split(',')
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => !isNaN(n) && n >= 1 && n <= maxN)
+      .filter((n, idx, arr) => arr.indexOf(n) === idx)
+      .sort((a, b) => a - b)
+
+    setSelectedPool(numbers)
+  }
+
   // Clear all selections and reset state
   const clearPool = () => {
     setSelectedPool([])
+    setTextInput('')
     setTickets([])
     setIsGenerating(false)
     setLoadingMessage('')
@@ -241,6 +272,52 @@ export function WheelBuilderTab({ gameConfig }) {
           Choose at least {k} numbers from 1-{maxN} for {gameConfig.name}. Selected: {selectedPool.length}
         </p>
 
+        {/* Input Mode Toggle */}
+        <div className="flex gap-2 mb-4">
+          <button
+            onClick={() => setInputMode('grid')}
+            className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all min-h-[44px] touch-manipulation ${
+              inputMode === 'grid'
+                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            Grid Selection
+          </button>
+          <button
+            onClick={() => setInputMode('text')}
+            className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all min-h-[44px] touch-manipulation ${
+              inputMode === 'text'
+                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+            }`}
+          >
+            Text Input
+          </button>
+        </div>
+
+        {/* Text Input Mode */}
+        {inputMode === 'text' && (
+          <div className="mb-4 space-y-3">
+            <div>
+              <label className="block text-xs sm:text-sm font-bold text-slate-300 mb-2">
+                Enter comma-separated numbers (e.g., 1, 2, 3, 6, 8, 9, 10)
+              </label>
+              <textarea
+                value={textInput}
+                onChange={handleTextInputChange}
+                placeholder="1, 2, 3, 6, 8, 9, 10, 11, 12, 14, 15, 18, 19, 20..."
+                className="w-full px-3 sm:px-4 py-2 sm:py-3 bg-slate-800 border-2 border-slate-700 rounded-lg sm:rounded-xl text-slate-100 text-sm focus:border-cyan-500 focus:outline-none font-mono min-h-[100px]"
+              />
+            </div>
+            {textInput && selectedPool.length > 0 && (
+              <p className="text-xs text-slate-400">
+                {selectedPool.length} valid numbers parsed: {selectedPool.join(', ')}
+              </p>
+            )}
+          </div>
+        )}
+
         {/* Quick Actions */}
         <div className="flex flex-wrap gap-2 mb-4">
           <button
@@ -276,16 +353,18 @@ export function WheelBuilderTab({ gameConfig }) {
         </div>
 
         {/* Number Grid */}
-        <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-15 gap-2">
-          {NUMBER_RANGE.map((num) => (
-            <NumberChip
-              key={num}
-              number={num}
-              selected={selectedPool.includes(num)}
-              onToggle={() => toggleNumber(num)}
-            />
-          ))}
-        </div>
+        {inputMode === 'grid' && (
+          <div className="grid grid-cols-5 sm:grid-cols-8 md:grid-cols-10 lg:grid-cols-12 xl:grid-cols-15 gap-2">
+            {NUMBER_RANGE.map((num) => (
+              <NumberChip
+                key={num}
+                number={num}
+                selected={selectedPool.includes(num)}
+                onToggle={() => toggleNumber(num)}
+              />
+            ))}
+          </div>
+        )}
 
         {/* Selected Numbers Display */}
         {selectedPool.length > 0 && (
