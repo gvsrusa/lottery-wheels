@@ -6,13 +6,19 @@ import { WheelBuilderTab } from './components/WheelBuilderTab'
 
 function App() {
   const [activeTab, setActiveTab] = useState('wheel-builder')
+  const [selectedState, setSelectedState] = useState('TX')
   const [selectedGame, setSelectedGame] = useState('texas-two-step')
   const [pool, setPool] = useState([])
   const [bonusCandidates, setBonusCandidates] = useState([])
   const [drawn, setDrawn] = useState([])
   const [drawnBonus, setDrawnBonus] = useState('')
   const [tiers, setTiers] = useState(() =>
-    Object.fromEntries(GAME_CONFIGS['texas-two-step'].tiers.map((tier) => [tier.id, tier.defaultChecked]))
+    Object.fromEntries(
+      GAME_CONFIGS['TX'].games['texas-two-step'].tiers.map((tier) => [
+        tier.id,
+        tier.defaultChecked,
+      ])
+    )
   )
   const [summaryCards, setSummaryCards] = useState([])
   const [rows, setRows] = useState([])
@@ -35,7 +41,7 @@ function App() {
   const [isGenerating, setIsGenerating] = useState(false)
   const [loadingMessage, setLoadingMessage] = useState('')
 
-  const gameConfig = GAME_CONFIGS[selectedGame]
+  const gameConfig = GAME_CONFIGS[selectedState].games[selectedGame]
   const NUMBER_RANGE = Array.from(
     { length: gameConfig.mainNumbers.max },
     (_, idx) => idx + 1
@@ -44,8 +50,15 @@ function App() {
     ? Array.from({ length: gameConfig.bonusNumbers.max }, (_, idx) => idx + 1)
     : []
 
+  // Handle state change
+  const handleStateChange = (newState) => {
+    setSelectedState(newState)
+    const newGame = Object.keys(GAME_CONFIGS[newState].games)[0]
+    handleGameChange(newGame, newState)
+  }
+
   // Handle game change
-  const handleGameChange = (newGame) => {
+  const handleGameChange = (newGame, newState = selectedState) => {
     setSelectedGame(newGame)
     setPool([])
     setBonusCandidates([])
@@ -57,7 +70,10 @@ function App() {
     setCurrentPage(1)
     setTiers(
       Object.fromEntries(
-        GAME_CONFIGS[newGame].tiers.map((tier) => [tier.id, tier.defaultChecked])
+        GAME_CONFIGS[newState].games[newGame].tiers.map((tier) => [
+          tier.id,
+          tier.defaultChecked,
+        ])
       )
     )
 
@@ -86,17 +102,32 @@ function App() {
             <span className="line-clamp-2">{gameConfig.description}</span>
           </p>
 
-          {/* Game Selector */}
+          {/* State Selector */}
           <div className="mt-4 sm:mt-6 flex flex-wrap gap-2">
-            {Object.entries(GAME_CONFIGS).map(([key, config]) => (
+            {Object.entries(GAME_CONFIGS).map(([stateCode, config]) => (
+              <button
+                key={stateCode}
+                onClick={() => handleStateChange(stateCode)}
+                className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 min-h-[44px] touch-manipulation ${selectedState === stateCode
+                  ? 'bg-gradient-to-r from-purple-500 to-indigo-600 text-white shadow-lg shadow-purple-500/50'
+                  : 'bg-slate-800/80 text-slate-300 border-2 border-slate-700 hover:border-purple-500/50 hover:bg-slate-700'
+                  }`}
+              >
+                {config.name}
+              </button>
+            ))}
+          </div>
+
+          {/* Game Selector */}
+          <div className="mt-4 flex flex-wrap gap-2">
+            {Object.entries(GAME_CONFIGS[selectedState].games).map(([key, config]) => (
               <button
                 key={key}
                 onClick={() => handleGameChange(key)}
-                className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 min-h-[44px] touch-manipulation ${
-                  selectedGame === key
-                    ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-blue-500/50'
-                    : 'bg-slate-800/80 text-slate-300 border-2 border-slate-700 hover:border-blue-500/50 hover:bg-slate-700'
-                }`}
+                className={`px-3 sm:px-4 py-2 sm:py-2.5 rounded-lg sm:rounded-xl font-bold text-xs sm:text-sm transition-all duration-200 min-h-[44px] touch-manipulation ${selectedGame === key
+                  ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white shadow-lg shadow-blue-500/50'
+                  : 'bg-slate-800/80 text-slate-300 border-2 border-slate-700 hover:border-blue-500/50 hover:bg-slate-700'
+                  }`}
               >
                 {config.name}
               </button>
@@ -107,31 +138,28 @@ function App() {
           <div className="mt-4 sm:mt-6 flex flex-wrap gap-2 border-b border-slate-700/50 pb-0">
             <button
               onClick={() => setActiveTab('wheel-builder')}
-              className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 min-h-[44px] touch-manipulation ${
-                activeTab === 'wheel-builder'
-                  ? 'border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-300'
-              }`}
+              className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 min-h-[44px] touch-manipulation ${activeTab === 'wheel-builder'
+                ? 'border-cyan-500 text-cyan-400'
+                : 'border-transparent text-slate-400 hover:text-slate-300'
+                }`}
             >
               Wheel Builder
             </button>
             <button
               onClick={() => setActiveTab('coverage-analysis')}
-              className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 min-h-[44px] touch-manipulation ${
-                activeTab === 'coverage-analysis'
-                  ? 'border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-300'
-              }`}
+              className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 min-h-[44px] touch-manipulation ${activeTab === 'coverage-analysis'
+                ? 'border-cyan-500 text-cyan-400'
+                : 'border-transparent text-slate-400 hover:text-slate-300'
+                }`}
             >
               Coverage Analysis
             </button>
             <button
               onClick={() => setActiveTab('game-configs')}
-              className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 min-h-[44px] touch-manipulation ${
-                activeTab === 'game-configs'
-                  ? 'border-cyan-500 text-cyan-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-300'
-              }`}
+              className={`px-3 sm:px-6 py-2 sm:py-3 font-bold text-xs sm:text-sm transition-all duration-200 border-b-4 min-h-[44px] touch-manipulation ${activeTab === 'game-configs'
+                ? 'border-cyan-500 text-cyan-400'
+                : 'border-transparent text-slate-400 hover:text-slate-300'
+                }`}
             >
               Game Configs
             </button>

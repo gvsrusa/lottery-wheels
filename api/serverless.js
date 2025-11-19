@@ -79,7 +79,7 @@ function makeLCG(seed) {
  * Hash a string to a 32-bit integer seed
  */
 function hashSeed(s) {
-  if (!s) return Math.floor(Math.random() * 2 ** 31)
+  if (!s) return 42
   let h = 2166136261 >>> 0
   for (let i = 0; i < s.length; i += 1) {
     h ^= s.charCodeAt(i)
