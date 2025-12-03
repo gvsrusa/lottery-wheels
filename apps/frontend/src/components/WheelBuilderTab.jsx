@@ -11,6 +11,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 export function WheelBuilderTab({ gameConfig }) {
   const [selectedPool, setSelectedPool] = useState([])
+  const [fixedNumbers, setFixedNumbers] = useState([])
   const [inputMode, setInputMode] = useState('grid') // 'grid' or 'text'
   const [textInput, setTextInput] = useState('')
   const [guarantee, setGuarantee] = useState(3)
@@ -35,6 +36,7 @@ export function WheelBuilderTab({ gameConfig }) {
   // Reset state when game changes
   useEffect(() => {
     setSelectedPool([])
+    setFixedNumbers([])
     setTickets([])
     setIsGenerating(false)
     setLoadingMessage('')
@@ -48,7 +50,19 @@ export function WheelBuilderTab({ gameConfig }) {
 
   // Toggle number selection
   const toggleNumber = (num) => {
-    setSelectedPool((prev) =>
+    setSelectedPool((prev) => {
+      const newPool = prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num].sort((a, b) => a - b)
+      // If removing from pool, also remove from fixed
+      if (prev.includes(num)) {
+        setFixedNumbers(f => f.filter(n => n !== num))
+      }
+      return newPool
+    })
+  }
+
+  const toggleFixedNumber = (num) => {
+    if (!selectedPool.includes(num)) return
+    setFixedNumbers((prev) =>
       prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num].sort((a, b) => a - b)
     )
   }
@@ -67,6 +81,7 @@ export function WheelBuilderTab({ gameConfig }) {
       .sort((a, b) => a - b)
 
     setSelectedPool(numbers)
+    setFixedNumbers([]) // Reset fixed numbers when pool changes
   }
 
   // Apply text input to pool
@@ -79,11 +94,13 @@ export function WheelBuilderTab({ gameConfig }) {
       .sort((a, b) => a - b)
 
     setSelectedPool(numbers)
+    setFixedNumbers([]) // Reset fixed numbers when pool changes
   }
 
   // Clear all selections and reset state
   const clearPool = () => {
     setSelectedPool([])
+    setFixedNumbers([])
     setTextInput('')
     setTickets([])
     setIsGenerating(false)
@@ -95,19 +112,25 @@ export function WheelBuilderTab({ gameConfig }) {
   }
 
   // Select all numbers
-  const selectAll = () => setSelectedPool([...NUMBER_RANGE])
+  const selectAll = () => {
+    setSelectedPool([...NUMBER_RANGE])
+    setFixedNumbers([]) // Reset fixed numbers when pool changes
+  }
 
   // Quick select random pool
   const quickSelectRandom = (count) => {
     const shuffled = [...NUMBER_RANGE].sort(() => Math.random() - 0.5)
     setSelectedPool(shuffled.slice(0, count).sort((a, b) => a - b))
+    setFixedNumbers([]) // Reset fixed numbers when pool changes
   }
 
   // Calculate statistics
   const stats = useMemo(() => {
-    const n = selectedPool.length
+    const variablePoolSize = selectedPool.length - fixedNumbers.length
+    const variableK = k - fixedNumbers.length
     const m = guarantee
-    if (n < k) {
+
+    if (variablePoolSize < variableK || variableK <= 0) {
       return {
         lbCount: 0,
         lbSch: 0,
@@ -116,8 +139,8 @@ export function WheelBuilderTab({ gameConfig }) {
         allTickets: 0,
       }
     }
-    return calculateWheelStats(n, k, m)
-  }, [selectedPool, guarantee, k])
+    return calculateWheelStats(variablePoolSize, variableK, m)
+  }, [selectedPool, fixedNumbers, guarantee, k])
 
   // Paginated tickets
   const paginatedTickets = useMemo(() => {
@@ -182,6 +205,18 @@ export function WheelBuilderTab({ gameConfig }) {
       return
     }
 
+    if (fixedNumbers.length >= k) {
+      alert(`Cannot fix ${fixedNumbers.length} numbers for a pick-${k} game. Max fixed is ${k - 1}.`)
+      return
+    }
+
+    // Check if guarantee is possible with fixed numbers
+    const variableK = k - fixedNumbers.length
+    if (m > variableK) {
+      alert(`Guarantee ${m} is too high for the remaining ${variableK} spots. Please lower the guarantee or remove fixed numbers.`)
+      return
+    }
+
     setIsGenerating(true)
     setLoadingMessage(`Generating ${mode} tickets...`)
     setProofStatus(null)
@@ -200,6 +235,7 @@ export function WheelBuilderTab({ gameConfig }) {
           seed,
           scanCount,
           mode,
+          fixedNumbers,
         }),
       })
 
@@ -276,21 +312,19 @@ export function WheelBuilderTab({ gameConfig }) {
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => setInputMode('grid')}
-            className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all min-h-[44px] touch-manipulation ${
-              inputMode === 'grid'
-                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white'
-                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-            }`}
+            className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all min-h-[44px] touch-manipulation ${inputMode === 'grid'
+              ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white'
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
           >
             Grid Selection
           </button>
           <button
             onClick={() => setInputMode('text')}
-            className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all min-h-[44px] touch-manipulation ${
-              inputMode === 'text'
-                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white'
-                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-            }`}
+            className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all min-h-[44px] touch-manipulation ${inputMode === 'text'
+              ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white'
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
           >
             Text Input
           </button>
@@ -384,6 +418,41 @@ export function WheelBuilderTab({ gameConfig }) {
             </div>
           </div>
         )}
+
+        {/* Fixed Numbers Selection */}
+        {selectedPool.length > 0 && (
+          <div className="mt-4 p-4 bg-slate-800/60 border border-slate-700 rounded-xl">
+            <div className="flex justify-between items-center mb-2">
+              <p className="text-sm font-bold text-slate-300">
+                Select Fixed Numbers (Bankers):
+              </p>
+              <span className="text-xs text-slate-400">
+                {fixedNumbers.length} / {k - 1} max
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {selectedPool.map((num) => {
+                const isFixed = fixedNumbers.includes(num)
+                return (
+                  <button
+                    key={num}
+                    onClick={() => toggleFixedNumber(num)}
+                    className={`w-10 h-10 rounded-lg font-bold shadow-lg transition-all ${isFixed
+                      ? 'bg-gradient-to-br from-amber-500 to-orange-600 text-white ring-2 ring-amber-300'
+                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                      }`}
+                  >
+                    {num}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-slate-500 mt-2">
+              Click numbers above to toggle them as "Fixed". Fixed numbers appear in every ticket.
+            </p>
+          </div>
+        )}
       </section>
 
       {/* Configuration Card */}
@@ -408,7 +477,7 @@ export function WheelBuilderTab({ gameConfig }) {
               onChange={(e) => setGuarantee(parseInt(e.target.value, 10))}
               className="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-800 border-2 border-slate-700 rounded-lg sm:rounded-xl text-slate-100 text-sm focus:border-cyan-500 focus:outline-none min-h-[44px]"
             >
-              {Array.from({ length: k - 1 }, (_, i) => i + 2).map((m) => (
+              {Array.from({ length: Math.max(1, k - fixedNumbers.length) }, (_, i) => i + 1).map((m) => (
                 <option key={m} value={m}>
                   {m} / {k}
                 </option>
@@ -534,10 +603,10 @@ export function WheelBuilderTab({ gameConfig }) {
       {selectedPool.length >= k && (
         <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
           <StatCard label="Pool Size (n)" value={selectedPool.length} />
-          <StatCard label="Guarantee" value={`${guarantee} / ${k}`} />
-          <StatCard label="Lower Bound (counting)" value={stats.lbCount.toLocaleString()} />
-          <StatCard label="Lower Bound (Schönheim)" value={stats.lbSch.toLocaleString()} />
-          <StatCard label="Universe C(n,m)" value={stats.universeSize.toLocaleString()} hint="m-subsets" />
+          <StatCard label="Fixed Numbers" value={fixedNumbers.length} />
+          <StatCard label="Variable Spots" value={k - fixedNumbers.length} />
+          <StatCard label="Guarantee" value={`${guarantee} / ${k - fixedNumbers.length} (var)`} />
+          <StatCard label="Lower Bound" value={stats.lowerBound.toLocaleString()} />
         </section>
       )}
 
@@ -710,9 +779,8 @@ export function WheelBuilderTab({ gameConfig }) {
                     {coverageBreakdown.map((breakdown, idx) => (
                       <tr
                         key={`${breakdown.level}-${idx}`}
-                        className={`hover:bg-emerald-500/10 transition-all duration-200 ${
-                          idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'
-                        }`}
+                        className={`hover:bg-emerald-500/10 transition-all duration-200 ${idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'
+                          }`}
                       >
                         <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-bold text-slate-200 border-b border-slate-700/30">
                           {breakdown.level}

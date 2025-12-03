@@ -392,62 +392,108 @@ async function verifyCoverage(jobId, pool, k, m, tickets) {
 
 // API: Generate tickets
 app.post('/api/generate-tickets', async (req, res) => {
-  const { pool, k, guarantee, effort, seed, scanCount, mode } = req.body
+    const { pool, k, guarantee, effort, seed, scanCount, mode, fixedNumbers = [] } = req.body
+
+  console.log('Received generation request:', { poolSize: pool?.length, k, guarantee, mode, fixedNumbers })
 
   if (!pool || !k || !guarantee || !effort || !mode) {
+    console.log('Missing parameters')
     return res.status(400).json({ error: 'Missing required parameters' })
   }
 
   try {
-    const n = pool.length
-    const m = guarantee
-    let tickets = []
-
-    // Validate pool size
-    if (n < k) {
-      return res.status(400).json({ error: `Pool must have at least ${k} numbers` })
-    }
-
-    // Generate tickets based on mode
-    if (mode === 'universe') {
-      const tot = nCk(n, k)
-      if (tot > UNIVERSE_TICKET_CAP) {
-        return res.status(400).json({
-          error: `Universe mode needs ${tot.toLocaleString()} tickets. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`,
-        })
+      // 1. Validate fixed numbers
+      if (fixedNumbers.length > 0) {
+        // Check if all fixed numbers are in the pool
+        const poolSet = new Set(pool)
+        const invalidFixed = fixedNumbers.filter(n => !poolSet.has(n))
+        if (invalidFixed.length > 0) {
+          return res.status(400).json({ error: `Fixed numbers [${invalidFixed.join(', ')}] are not in the selected pool` })
+        }
+        
+        // Check if too many fixed numbers
+        if (fixedNumbers.length >= k) {
+           return res.status(400).json({ error: `Cannot fix ${fixedNumbers.length} numbers for a pick-${k} game. Max fixed is ${k-1}.` })
+        }
       }
-      tickets = exactUniverseTickets(pool, k)
-    } else if (mode === 'universe-m') {
-      const tot = nCk(n, m)
-      if (tot > UNIVERSE_TICKET_CAP) {
-        return res.status(400).json({
-          error: `Universe C(n,m) mode needs ${tot.toLocaleString()} combinations. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`,
-        })
-      }
-      tickets = exactUniverseTickets(pool, m)
-    } else {
-      // greedy, scan, or lb mode
-      let limit = null
-      if (mode === 'scan') {
-        limit = Math.max(1, scanCount)
-      } else if (mode === 'lb') {
-        const stats = calculateWheelStats(n, k, m)
-        limit = stats.lowerBound
-      }
-      const result = greedyWheel(pool, k, m, effort, seed, limit)
-      tickets = result.tickets
-    }
 
-    // Calculate coverage breakdown
-    const coverageBreakdown = calculateCoverageBreakdown(pool, tickets, k)
+      // 2. Prepare variable pool and k
+      const fixedSet = new Set(fixedNumbers)
+      const variablePool = pool.filter(n => !fixedSet.has(n))
+      const variableK = k - fixedNumbers.length
+      
+      const n = variablePool.length
+      // Guarantee applies to the variable part? 
+      // User requirement: "fix certain numbers". Usually this means:
+      // If I fix 1 number in a Pick 6 game, I need to generate Pick 5 tickets from the remaining pool.
+      // The guarantee "3 if 3" usually implies "3 if 3 matches in the variable part".
+      // Let's stick to the plan: generate wheels for variablePool with variableK.
+      const m = guarantee 
+      
+      // Adjust m if it's larger than variableK (can happen if fixed numbers are many)
+      // e.g. Pick 6, Fix 4, variableK=2. If guarantee=3, it's impossible.
+      if (m > variableK) {
+         return res.status(400).json({ 
+           error: `Guarantee ${m} is too high for the remaining ${variableK} spots (Fixed: ${fixedNumbers.length}). Max guarantee is ${variableK}.` 
+         })
+      }
 
-    res.json({
-      tickets,
-      coverageBreakdown,
-      stats: {
-        ticketCount: tickets.length,
-      },
-    })
+      let tickets = []
+
+      // Validate variable pool size
+      if (n < variableK) {
+        return res.status(400).json({ error: `Remaining pool size (${n}) is too small for ${variableK} spots` })
+      }
+
+      // Generate tickets based on mode using VARIABLE parameters
+      if (mode === 'universe') {
+        const tot = nCk(n, variableK)
+        if (tot > UNIVERSE_TICKET_CAP) {
+          return res.status(400).json({
+            error: `Universe mode needs ${tot.toLocaleString()} tickets. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`,
+          })
+        }
+        tickets = exactUniverseTickets(variablePool, variableK)
+      } else if (mode === 'universe-m') {
+        const tot = nCk(n, m)
+        if (tot > UNIVERSE_TICKET_CAP) {
+          return res.status(400).json({
+            error: `Universe C(n,m) mode needs ${tot.toLocaleString()} combinations. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`,
+          })
+        }
+        tickets = exactUniverseTickets(variablePool, m)
+      } else {
+        // greedy, scan, or lb mode
+        let limit = null
+        if (mode === 'scan') {
+          limit = Math.max(1, scanCount)
+        } else if (mode === 'lb') {
+          const stats = calculateWheelStats(n, variableK, m)
+          limit = stats.lowerBound
+        }
+        const result = greedyWheel(variablePool, variableK, m, effort, seed, limit)
+        tickets = result.tickets
+      }
+
+      // 3. Append fixed numbers to every ticket
+      if (fixedNumbers.length > 0) {
+        tickets = tickets.map(t => [...t, ...fixedNumbers].sort((a, b) => a - b))
+      }
+
+      // Calculate coverage breakdown (using ORIGINAL pool and FULL tickets)
+      // Note: Coverage calculation might need to be aware of fixed numbers if we want to be precise,
+      // but calculateCoverageBreakdown takes (pool, tickets, k).
+      // If we pass the full pool and full tickets, it should calculate correctly 
+      // how many tickets match X numbers from the full pool.
+      const coverageBreakdown = calculateCoverageBreakdown(pool, tickets, k)
+
+      res.json({
+        tickets,
+        coverageBreakdown,
+        stats: {
+          ticketCount: tickets.length,
+        },
+      })
   } catch (error) {
     console.error('Error generating tickets:', error)
     res.status(500).json({ error: error.message })
