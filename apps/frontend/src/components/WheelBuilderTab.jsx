@@ -12,6 +12,7 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 export function WheelBuilderTab({ gameConfig }) {
   const [selectedPool, setSelectedPool] = useState([])
   const [fixedNumbers, setFixedNumbers] = useState([])
+  const [fixedBonusNumbers, setFixedBonusNumbers] = useState([]) // New state for bonus numbers
   const [inputMode, setInputMode] = useState('grid') // 'grid' or 'text'
   const [textInput, setTextInput] = useState('')
   const [guarantee, setGuarantee] = useState(3)
@@ -37,6 +38,7 @@ export function WheelBuilderTab({ gameConfig }) {
   useEffect(() => {
     setSelectedPool([])
     setFixedNumbers([])
+    setFixedBonusNumbers([]) // Reset bonus numbers
     setTickets([])
     setIsGenerating(false)
     setLoadingMessage('')
@@ -65,6 +67,43 @@ export function WheelBuilderTab({ gameConfig }) {
     setFixedNumbers((prev) =>
       prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num].sort((a, b) => a - b)
     )
+  }
+
+  const toggleFixedBonusNumber = (num) => {
+    setFixedBonusNumbers((prev) => {
+      // If already selected, remove it
+      if (prev.includes(num)) {
+        return prev.filter((n) => n !== num)
+      }
+      // Allow selecting as many as desired (no limit)
+      return [...prev, num].sort((a, b) => a - b)
+    })
+  }
+
+  // Helper to get bonus numbers for a specific ticket index (Round-Robin)
+  const getBonusForTicket = (ticketIndex) => {
+    if (!gameConfig.hasBonus || fixedBonusNumbers.length === 0) return []
+
+    const pick = gameConfig.bonusNumbers.pick
+    const pool = fixedBonusNumbers
+    const poolLen = pool.length
+
+    // Simple round-robin: 
+    // For pick=1: pool[i % len]
+    // For pick>1: This is trickier, but let's just take sequential slices for now
+    // e.g. pick=2, pool=[1,2,3]. T1: [1,2], T2: [3,1], T3: [2,3]...
+
+    const result = []
+    for (let i = 0; i < pick; i++) {
+      // Offset the index for each pick position to ensure rotation
+      // This is a simple way to distribute. 
+      // Position 0 cycles through pool starting at 0
+      // Position 1 cycles through pool starting at 1 (or just next index)
+      // Let's just do a continuous stream from the pool
+      const globalIndex = (ticketIndex * pick) + i
+      result.push(pool[globalIndex % poolLen])
+    }
+    return result.sort((a, b) => a - b)
   }
 
   // Handle text input parsing
@@ -101,6 +140,7 @@ export function WheelBuilderTab({ gameConfig }) {
   const clearPool = () => {
     setSelectedPool([])
     setFixedNumbers([])
+    setFixedBonusNumbers([]) // Reset bonus numbers
     setTextInput('')
     setTickets([])
     setIsGenerating(false)
@@ -278,7 +318,17 @@ export function WheelBuilderTab({ gameConfig }) {
     if (tickets.length === 0) return
 
     const headers = ['ticket', ...Array.from({ length: k }, (_, i) => `n${i + 1}`)]
-    const rows = tickets.map((t, i) => [i + 1, ...t])
+    if (gameConfig.hasBonus) {
+      headers.push('bonus')
+    }
+    const rows = tickets.map((t, i) => {
+      const row = [i + 1, ...t]
+      if (gameConfig.hasBonus && fixedBonusNumbers.length > 0) {
+        const bonus = getBonusForTicket(i)
+        row.push(bonus.join(' '))
+      }
+      return row
+    })
     const csv = toCSV([headers, ...rows])
 
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -296,7 +346,14 @@ export function WheelBuilderTab({ gameConfig }) {
   const handleCopy = async () => {
     if (tickets.length === 0) return
 
-    const txt = tickets.map((t) => t.join(' ')).join('\n')
+    const txt = tickets.map((t, i) => {
+      let line = t.join(' ')
+      if (gameConfig.hasBonus && fixedBonusNumbers.length > 0) {
+        const bonus = getBonusForTicket(i)
+        line += ` + ${bonus.join(' ')}`
+      }
+      return line
+    }).join('\n')
     try {
       await navigator.clipboard.writeText(txt)
       alert('Copied to clipboard!')
@@ -458,6 +515,41 @@ export function WheelBuilderTab({ gameConfig }) {
             </div>
             <p className="text-xs text-slate-500 mt-2">
               Click numbers above to toggle them as "Fixed". Fixed numbers appear in every ticket.
+            </p>
+          </div>
+        )}
+
+        {/* Bonus Number Selection */}
+        {gameConfig.hasBonus && (
+          <div className="mt-4 p-4 bg-slate-800/60 border border-slate-700 rounded-xl">
+            <div className="flex justify-between items-center mb-2">
+              <p className="text-sm font-bold text-slate-300">
+                Select Bonus Numbers (Optional, max {gameConfig.bonusNumbers.pick}):
+              </p>
+              <span className="text-xs text-slate-400">
+                {fixedBonusNumbers.length} / {gameConfig.bonusNumbers.pick}
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {Array.from({ length: gameConfig.bonusNumbers.max }, (_, i) => i + 1).map((num) => {
+                const isSelected = fixedBonusNumbers.includes(num)
+                return (
+                  <button
+                    key={num}
+                    onClick={() => toggleFixedBonusNumber(num)}
+                    className={`w-10 h-10 rounded-full font-bold shadow-lg transition-all ${isSelected
+                      ? 'bg-gradient-to-br from-red-500 to-pink-600 text-white ring-2 ring-red-300'
+                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                      }`}
+                  >
+                    {num}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-slate-500 mt-2">
+              These bonus numbers will be appended to every ticket.
             </p>
           </div>
         )}
@@ -663,6 +755,11 @@ export function WheelBuilderTab({ gameConfig }) {
                       <span className="text-cyan-300 font-semibold">
                         {ticket.map((n) => String(n).padStart(2, ' ')).join(' ')}
                       </span>
+                      {gameConfig.hasBonus && fixedBonusNumbers.length > 0 && (
+                        <span className="text-pink-400 font-bold ml-2">
+                          + {getBonusForTicket(actualIndex).join(' ')}
+                        </span>
+                      )}
                     </div>
                   )
                 })}
