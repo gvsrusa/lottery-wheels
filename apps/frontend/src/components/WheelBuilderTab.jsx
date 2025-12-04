@@ -128,9 +128,10 @@ export function WheelBuilderTab({ gameConfig }) {
   const stats = useMemo(() => {
     const variablePoolSize = selectedPool.length - fixedNumbers.length
     const variableK = k - fixedNumbers.length
-    const m = guarantee
+    // guarantee is now TOTAL guarantee. Variable guarantee = total - fixed
+    const variableM = guarantee - fixedNumbers.length
 
-    if (variablePoolSize < variableK || variableK <= 0) {
+    if (variablePoolSize < variableK || variableK <= 0 || variableM <= 0) {
       return {
         lbCount: 0,
         lbSch: 0,
@@ -139,7 +140,7 @@ export function WheelBuilderTab({ gameConfig }) {
         allTickets: 0,
       }
     }
-    return calculateWheelStats(variablePoolSize, variableK, m)
+    return calculateWheelStats(variablePoolSize, variableK, variableM)
   }, [selectedPool, fixedNumbers, guarantee, k])
 
   // Paginated tickets
@@ -197,7 +198,8 @@ export function WheelBuilderTab({ gameConfig }) {
   // Generate tickets
   const handleGenerate = async (mode) => {
     const n = selectedPool.length
-    const m = guarantee
+    // guarantee is TOTAL. variableM = guarantee - fixedNumbers.length
+    const m = guarantee - fixedNumbers.length
 
     // Validation
     if (n < k) {
@@ -213,7 +215,13 @@ export function WheelBuilderTab({ gameConfig }) {
     // Check if guarantee is possible with fixed numbers
     const variableK = k - fixedNumbers.length
     if (m > variableK) {
-      alert(`Guarantee ${m} is too high for the remaining ${variableK} spots. Please lower the guarantee or remove fixed numbers.`)
+      // This shouldn't happen with UI constraints, but good to check
+      alert(`Guarantee ${guarantee} is too high for the remaining ${variableK} spots.`)
+      return
+    }
+
+    if (m <= 0) {
+      alert(`Guarantee must be greater than fixed numbers count.`)
       return
     }
 
@@ -477,7 +485,10 @@ export function WheelBuilderTab({ gameConfig }) {
               onChange={(e) => setGuarantee(parseInt(e.target.value, 10))}
               className="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-800 border-2 border-slate-700 rounded-lg sm:rounded-xl text-slate-100 text-sm focus:border-cyan-500 focus:outline-none min-h-[44px]"
             >
-              {Array.from({ length: Math.max(1, k - fixedNumbers.length) }, (_, i) => i + 1).map((m) => (
+              {/* Show options from (fixed + 1) up to k. 
+                  Example: Pick 6, Fixed 1. Range: 2 to 6.
+              */}
+              {Array.from({ length: k - fixedNumbers.length }, (_, i) => i + fixedNumbers.length + 1).map((m) => (
                 <option key={m} value={m}>
                   {m} / {k}
                 </option>
@@ -605,7 +616,7 @@ export function WheelBuilderTab({ gameConfig }) {
           <StatCard label="Pool Size (n)" value={selectedPool.length} />
           <StatCard label="Fixed Numbers" value={fixedNumbers.length} />
           <StatCard label="Variable Spots" value={k - fixedNumbers.length} />
-          <StatCard label="Guarantee" value={`${guarantee} / ${k - fixedNumbers.length} (var)`} />
+          <StatCard label="Guarantee" value={`${guarantee} / ${k}`} />
           <StatCard label="Lower Bound" value={stats.lowerBound.toLocaleString()} />
         </section>
       )}

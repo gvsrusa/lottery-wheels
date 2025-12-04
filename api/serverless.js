@@ -207,11 +207,11 @@ function exactUniverseTickets(pool, k) {
 /**
  * Calculate coverage breakdown
  */
-function calculateCoverageBreakdown(pool, tickets, k) {
+function calculateCoverageBreakdown(pool, tickets, k, minMatch = 2) {
   const breakdown = []
 
-  // For each match level from k down to 2
-  for (let matchLevel = k; matchLevel >= 2; matchLevel--) {
+  // For each match level from k down to minMatch
+  for (let matchLevel = k; matchLevel >= minMatch; matchLevel--) {
     // Generate all possible scenarios where exactly matchLevel numbers from pool are drawn
     const poolSubsets = kCombinations(pool, matchLevel)
 
@@ -470,8 +470,27 @@ app.post('/api/generate-tickets', async (req, res) => {
       tickets = tickets.map(t => [...t, ...fixedNumbers].sort((a, b) => a - b))
     }
 
-    // Calculate coverage breakdown (using ORIGINAL pool and FULL tickets)
-    const coverageBreakdown = calculateCoverageBreakdown(pool, tickets, k)
+    // Calculate coverage breakdown
+    let coverageBreakdown = []
+    
+    if (fixedNumbers.length > 0) {
+       // Calculate coverage on variable pool using variable tickets (before appending fixed)
+       // We need to reconstruct variable tickets since we already appended fixed numbers
+       const varTickets = tickets.map(t => t.filter(n => !fixedSet.has(n)))
+       // Use minMatch=1 for variable part so we can show "fixed+1 if fixed+1"
+       const varBreakdown = calculateCoverageBreakdown(variablePool, varTickets, variableK, 1)
+       
+       // Remap levels: e.g. 3/3 (var) -> 4/4 (total) if fixed=1
+       coverageBreakdown = varBreakdown.map(item => {
+         const [match, total] = item.level.split('/').map(Number)
+         return {
+           level: `${match + fixedNumbers.length}/${total + fixedNumbers.length}`,
+           tickets: item.tickets
+         }
+       })
+    } else {
+       coverageBreakdown = calculateCoverageBreakdown(pool, tickets, k)
+    }
 
     res.json({
       tickets,
