@@ -757,7 +757,7 @@ export function WheelBuilderTab({ gameConfig }) {
                       </span>
                       {gameConfig.hasBonus && fixedBonusNumbers.length > 0 && (
                         <span className="text-pink-400 font-bold ml-2">
-                          + {fixedBonusNumbers.join(' ')}
+                          + {getBonusForTicket(actualIndex).join(' ')}
                         </span>
                       )}
                     </div>
