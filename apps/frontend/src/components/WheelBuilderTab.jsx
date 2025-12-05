@@ -13,6 +13,9 @@ export function WheelBuilderTab({ gameConfig }) {
   const [selectedPool, setSelectedPool] = useState([])
   const [fixedNumbers, setFixedNumbers] = useState([])
   const [fixedBonusNumbers, setFixedBonusNumbers] = useState([]) // New state for bonus numbers
+  const [ticketBonuses, setTicketBonuses] = useState([]) // Randomly assigned bonuses per ticket
+  const [bonusInputMode, setBonusInputMode] = useState('grid') // 'grid' or 'text'
+  const [bonusTextInput, setBonusTextInput] = useState('')
   const [inputMode, setInputMode] = useState('grid') // 'grid' or 'text'
   const [textInput, setTextInput] = useState('')
   const [guarantee, setGuarantee] = useState(3)
@@ -39,7 +42,9 @@ export function WheelBuilderTab({ gameConfig }) {
     setSelectedPool([])
     setFixedNumbers([])
     setFixedBonusNumbers([]) // Reset bonus numbers
+    setBonusTextInput('')
     setTickets([])
+    setTicketBonuses([])
     setIsGenerating(false)
     setLoadingMessage('')
     setProofStatus(null)
@@ -71,39 +76,62 @@ export function WheelBuilderTab({ gameConfig }) {
 
   const toggleFixedBonusNumber = (num) => {
     setFixedBonusNumbers((prev) => {
+      let newNums
       // If already selected, remove it
       if (prev.includes(num)) {
-        return prev.filter((n) => n !== num)
+        newNums = prev.filter((n) => n !== num)
+      } else {
+        // Allow selecting as many as desired (no limit)
+        newNums = [...prev, num].sort((a, b) => a - b)
       }
-      // Allow selecting as many as desired (no limit)
-      return [...prev, num].sort((a, b) => a - b)
+      setBonusTextInput(newNums.join(', '))
+      return newNums
     })
   }
 
-  // Helper to get bonus numbers for a specific ticket index (Round-Robin)
-  const getBonusForTicket = (ticketIndex) => {
-    if (!gameConfig.hasBonus || fixedBonusNumbers.length === 0) return []
+  // Effect to randomize bonus numbers across tickets
+  useEffect(() => {
+    if (!tickets.length || !gameConfig.hasBonus) {
+      setTicketBonuses([])
+      return
+    }
 
     const pick = gameConfig.bonusNumbers.pick
-    const pool = fixedBonusNumbers
-    const poolLen = pool.length
+    const totalSlots = tickets.length * pick
+    let pool = []
 
-    // Simple round-robin: 
-    // For pick=1: pool[i % len]
-    // For pick>1: This is trickier, but let's just take sequential slices for now
-    // e.g. pick=2, pool=[1,2,3]. T1: [1,2], T2: [3,1], T3: [2,3]...
+    // If user selected specific bonus numbers, use them.
+    // Otherwise, use ALL possible bonus numbers for a balanced random distribution.
+    let sourcePool = fixedBonusNumbers.length > 0
+      ? [...fixedBonusNumbers]
+      : Array.from({ length: gameConfig.bonusNumbers.max }, (_, i) => i + 1)
 
-    const result = []
-    for (let i = 0; i < pick; i++) {
-      // Offset the index for each pick position to ensure rotation
-      // This is a simple way to distribute. 
-      // Position 0 cycles through pool starting at 0
-      // Position 1 cycles through pool starting at 1 (or just next index)
-      // Let's just do a continuous stream from the pool
-      const globalIndex = (ticketIndex * pick) + i
-      result.push(pool[globalIndex % poolLen])
+    // Fill pool to meet demand, cycling through available source numbers
+    // We want a roughly equal distribution
+    while (pool.length < totalSlots) {
+      pool = pool.concat(sourcePool)
     }
-    return result.sort((a, b) => a - b)
+    // Trim to exact size required
+    pool = pool.slice(0, totalSlots)
+
+    // Shuffle (Fisher-Yates)
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+
+    // Chunk for each ticket
+    const bonuses = []
+    for (let i = 0; i < tickets.length; i++) {
+      bonuses.push(pool.slice(i * pick, (i + 1) * pick).sort((a, b) => a - b))
+    }
+    setTicketBonuses(bonuses)
+  }, [tickets, fixedBonusNumbers, gameConfig])
+
+  // Helper to get bonus numbers for a specific ticket index
+  const getBonusForTicket = (ticketIndex) => {
+    if (!gameConfig.hasBonus || !ticketBonuses[ticketIndex]) return []
+    return ticketBonuses[ticketIndex]
   }
 
   // Handle text input parsing
@@ -123,6 +151,24 @@ export function WheelBuilderTab({ gameConfig }) {
     setFixedNumbers([]) // Reset fixed numbers when pool changes
   }
 
+  // Handle bonus text input parsing
+  const handleBonusTextInputChange = (e) => {
+    const value = e.target.value
+    setBonusTextInput(value)
+
+    const maxBonus = gameConfig.bonusNumbers.max
+
+    // Parse comma-separated numbers
+    const numbers = value
+      .split(/[\s,]+/) // Split by comma or whitespace
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => !isNaN(n) && n >= 1 && n <= maxBonus)
+      .filter((n, idx, arr) => arr.indexOf(n) === idx) // Remove duplicates
+      .sort((a, b) => a - b)
+
+    setFixedBonusNumbers(numbers)
+  }
+
   // Apply text input to pool
   const applyTextInput = () => {
     const numbers = textInput
@@ -140,9 +186,12 @@ export function WheelBuilderTab({ gameConfig }) {
   const clearPool = () => {
     setSelectedPool([])
     setFixedNumbers([])
+    setFixedNumbers([])
     setFixedBonusNumbers([]) // Reset bonus numbers
+    setBonusTextInput('')
     setTextInput('')
     setTickets([])
+    setTicketBonuses([])
     setIsGenerating(false)
     setLoadingMessage('')
     setProofStatus(null)
@@ -323,7 +372,7 @@ export function WheelBuilderTab({ gameConfig }) {
     }
     const rows = tickets.map((t, i) => {
       const row = [i + 1, ...t]
-      if (gameConfig.hasBonus && fixedBonusNumbers.length > 0) {
+      if (gameConfig.hasBonus) {
         const bonus = getBonusForTicket(i)
         row.push(bonus.join(' '))
       }
@@ -348,7 +397,7 @@ export function WheelBuilderTab({ gameConfig }) {
 
     const txt = tickets.map((t, i) => {
       let line = t.join(' ')
-      if (gameConfig.hasBonus && fixedBonusNumbers.length > 0) {
+      if (gameConfig.hasBonus) {
         const bonus = getBonusForTicket(i)
         line += ` + ${bonus.join(' ')}`
       }
@@ -524,32 +573,71 @@ export function WheelBuilderTab({ gameConfig }) {
           <div className="mt-4 p-4 bg-slate-800/60 border border-slate-700 rounded-xl">
             <div className="flex justify-between items-center mb-2">
               <p className="text-sm font-bold text-slate-300">
-                Select Bonus Numbers (Optional, max {gameConfig.bonusNumbers.pick}):
+                Select Bonus Numbers (Optional):
               </p>
               <span className="text-xs text-slate-400">
                 {fixedBonusNumbers.length} / {gameConfig.bonusNumbers.pick}
               </span>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              {Array.from({ length: gameConfig.bonusNumbers.max }, (_, i) => i + 1).map((num) => {
-                const isSelected = fixedBonusNumbers.includes(num)
-                return (
-                  <button
-                    key={num}
-                    onClick={() => toggleFixedBonusNumber(num)}
-                    className={`w-10 h-10 rounded-full font-bold shadow-lg transition-all ${isSelected
-                      ? 'bg-gradient-to-br from-red-500 to-pink-600 text-white ring-2 ring-red-300'
-                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
-                      }`}
-                  >
-                    {num}
-                  </button>
-                )
-              })}
+            {/* Bonus Input Mode Toggle */}
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setBonusInputMode('grid')}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${bonusInputMode === 'grid'
+                  ? 'bg-gradient-to-r from-red-500 to-pink-600 text-white'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+              >
+                Grid
+              </button>
+              <button
+                onClick={() => setBonusInputMode('text')}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${bonusInputMode === 'text'
+                  ? 'bg-gradient-to-r from-red-500 to-pink-600 text-white'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+              >
+                Text
+              </button>
             </div>
+
+            {bonusInputMode === 'text' ? (
+              <div className="mb-2">
+                <textarea
+                  value={bonusTextInput}
+                  onChange={handleBonusTextInputChange}
+                  placeholder={`Enter bonus numbers (1-${gameConfig.bonusNumbers.max})`}
+                  className="w-full px-3 py-2 bg-slate-800 border-2 border-slate-700 rounded-lg text-slate-100 text-sm focus:border-pink-500 focus:outline-none font-mono min-h-[60px]"
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  {fixedBonusNumbers.length} valid bonus numbers: {fixedBonusNumbers.join(', ')}
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: gameConfig.bonusNumbers.max }, (_, i) => i + 1).map((num) => {
+                  const isSelected = fixedBonusNumbers.includes(num)
+                  return (
+                    <button
+                      key={num}
+                      onClick={() => toggleFixedBonusNumber(num)}
+                      className={`w-10 h-10 rounded-full font-bold shadow-lg transition-all ${isSelected
+                        ? 'bg-gradient-to-br from-red-500 to-pink-600 text-white ring-2 ring-red-300'
+                        : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                        }`}
+                    >
+                      {num}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
             <p className="text-xs text-slate-500 mt-2">
               These bonus numbers will be appended to every ticket.
+              <br />
+              <b>Note:</b> If none are selected, all available bonus numbers ({gameConfig.bonusNumbers.max}) will be distributed randomly and evenly across tickets.
             </p>
           </div>
         )}
@@ -755,7 +843,7 @@ export function WheelBuilderTab({ gameConfig }) {
                       <span className="text-cyan-300 font-semibold">
                         {ticket.map((n) => String(n).padStart(2, ' ')).join(' ')}
                       </span>
-                      {gameConfig.hasBonus && fixedBonusNumbers.length > 0 && (
+                      {gameConfig.hasBonus && getBonusForTicket(actualIndex).length > 0 && (
                         <span className="text-pink-400 font-bold ml-2">
                           + {getBonusForTicket(actualIndex).join(' ')}
                         </span>
