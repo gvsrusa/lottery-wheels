@@ -224,6 +224,13 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
       max: remainderNums.length 
     })
   }
+  
+  // Validation: Check if any group requires more numbers than available in the pool
+  for (const g of activeGroups) {
+      if (g.min > g.nums.length) {
+          throw new Error(`Group ${g.id} (Variable) requires min ${g.min} but only has ${g.nums.length} available numbers.`)
+      }
+  }
 
   // Check if constraints are valid
   const globalMin = activeGroups.reduce((sum, g) => sum + g.min, 0)
@@ -481,26 +488,12 @@ function calculateCoverageBreakdown(pool, tickets, k, minMatch = 2, constraints 
     for (const drawnFromPool of poolSubsets) {
        // If constraints are active, ignore scenarios that are impossible to draw
        if (hasConstraints) {
-         // Note: checkTupleConstraints expects (tuple, groups, k). 
-         // Here, the "tuple" is the drawn numbers (size matchLevel). 
-         // BUT checkTupleConstraints checks if a tuple fits into a K-ticket.
-         // A DRAW of size matchLevel is just a subset of the winning numbers.
-         // If the draw ITSELF violates the Max constraints of a group, it's impossible.
-         // e.g. Group A Max=1. Draw has {1, 2} from Group A. Impossible.
-         
-         // Let's do a direct check for MAX constraints only. 
-         // We can't strictly check MIN constraints on a subset draw because the other (k - matchLevel) numbers might fill the min.
-         // HOWEVER, if the drawn subset already EXCEEDS the max, it's impossible.
-         
-         let possible = true
-         for(const g of activeGroups) {
-            const count = drawnFromPool.reduce((sum, n) => g.nums.includes(n) ? sum + 1 : sum, 0)
-            if (count > g.max) {
-               possible = false; 
-               break; 
-            }
+         // Use the shared STRICT checker.
+         // This ensures that we only consider draws that could possibly be part of a valid winning ticket (size k).
+         // If a draw implies a violation of Max/Min/Slack constraints when extended to size k, it's impossible.
+         if (!checkTupleConstraints(drawnFromPool, activeGroups, k)) {
+           continue
          }
-         if (!possible) continue
        }
        
        validScenariosCount++
@@ -604,7 +597,7 @@ function* allComb(n, m) {
 /**
  * Verify coverage proof (background job)
  */
-async function verifyCoverage(jobId, pool, k, m, tickets, constraints = []) {
+async function verifyCoverage(jobId, pool, k, m, tickets, constraints = [], fixedNumbers = []) {
   const job = proofQueue.get(jobId)
   if (!job) return
 
@@ -616,6 +609,7 @@ async function verifyCoverage(jobId, pool, k, m, tickets, constraints = []) {
     let hasConstraints = false
     
     if (constraints && constraints.length > 0) {
+      // ... (Constraint parsing logic same as before)
       const poolSet = new Set(pool)
       const usedNumbers = new Set()
       
@@ -652,6 +646,10 @@ async function verifyCoverage(jobId, pool, k, m, tickets, constraints = []) {
     // Create a map from actual numbers to indices
     const numToIdx = new Map()
     pool.forEach((num, idx) => numToIdx.set(num, idx))
+    
+    // Fixed Number check optimization
+    const hasFixed = fixedNumbers && fixedNumbers.length > 0
+    const fixedSet = hasFixed ? new Set(fixedNumbers) : null
 
     // Rank function that works with 0-indexed positions
     function rankIndices(indices) {
@@ -685,7 +683,24 @@ async function verifyCoverage(jobId, pool, k, m, tickets, constraints = []) {
     for (const comb of allComb(n, m)) {
       const currentTuple = comb.map((idx) => pool[idx - 1])
       
-      // Constraint Check: If tuple is impossible, skip it (don't count as uncovered)
+      // 1. Fixed Numbers Check: The tuple MUST contain all fixed numbers to be relevant
+      if (hasFixed) {
+        let containsAllFixed = true
+        for (const fn of fixedNumbers) {
+           if (!currentTuple.includes(fn)) {
+             containsAllFixed = false
+             break
+           }
+        }
+        // If tuple doesn't have the fixed numbers, we don't care about covering it
+        // (Because the user scenario assumes fixed numbers ARE drawn)
+        if (!containsAllFixed) {
+           done++
+           continue
+        }
+      }
+      
+      // 2. Constraint Check: If tuple is impossible, skip it (don't count as uncovered)
       if (hasConstraints && !checkTupleConstraints(currentTuple, activeGroups, k)) {
         done += 1
          // Update progress
@@ -810,6 +825,14 @@ app.post('/api/generate-tickets', async (req, res) => {
              const newMin = Math.max(0, g.min - fixedInGroup)
              const newMax = g.max - fixedInGroup
              
+             // Check if Min exceeds remaining available numbers
+             const availableInGroup = g.numbers.length - fixedInGroup
+             if (newMin > availableInGroup) {
+                return res.status(400).json({ 
+                  error: `Group ${g.id} requires min ${g.min} numbers, but only ${availableInGroup} remain after selecting fixed numbers.` 
+                })
+             }
+
              if (fixedInGroup > g.max) {
                 return res.status(400).json({ 
                   error: `Group ${g.id} allows max ${g.max} numbers, but you have fixed ${fixedInGroup} numbers from it.` 
@@ -917,7 +940,7 @@ app.post('/api/calculate-stats', (req, res) => {
 
 // API: Submit proof verification job
 app.post('/api/verify-proof', async (req, res) => {
-  const { pool, k, m, tickets, groupConstraints } = req.body
+  const { pool, k, m, tickets, groupConstraints, fixedNumbers } = req.body
 
   if (!pool || !k || !m || !tickets) {
     return res.status(400).json({ error: 'Missing required parameters' })
@@ -935,7 +958,7 @@ app.post('/api/verify-proof', async (req, res) => {
   })
 
   // Start processing in background
-  verifyCoverage(jobId, pool, k, m, tickets, groupConstraints)
+  verifyCoverage(jobId, pool, k, m, tickets, groupConstraints, fixedNumbers)
 
   res.json({ jobId })
 })
