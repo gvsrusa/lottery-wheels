@@ -14,19 +14,6 @@ export function WheelBuilderTab({ gameConfig }) {
   const [fixedNumbers, setFixedNumbers] = useState([])
   const [fixedBonusNumbers, setFixedBonusNumbers] = useState([]) // New state for bonus numbers
   const [ticketBonuses, setTicketBonuses] = useState([]) // Randomly assigned bonuses per ticket
-
-
-  // Group Constraints (10 groups: 0-9)
-  const [isGroupConstraintsEnabled, setIsGroupConstraintsEnabled] = useState(false)
-  const [groupConstraints, setGroupConstraints] = useState(
-    Array.from({ length: 10 }, (_, i) => ({
-      id: i, // Groups 0-9
-      numbers: [],
-      rawInput: '',
-      min: 0,
-      max: 1 // Default max is 1
-    }))
-  )
   const [bonusInputMode, setBonusInputMode] = useState('grid') // 'grid' or 'text'
   const [bonusTextInput, setBonusTextInput] = useState('')
   const [inputMode, setInputMode] = useState('grid') // 'grid' or 'text'
@@ -55,17 +42,6 @@ export function WheelBuilderTab({ gameConfig }) {
     setSelectedPool([])
     setFixedNumbers([])
     setFixedBonusNumbers([]) // Reset bonus numbers
-    // Reset group constraints
-    setIsGroupConstraintsEnabled(false)
-    setGroupConstraints(
-      Array.from({ length: 10 }, (_, i) => ({
-        id: i, // Groups 0-9
-        numbers: [],
-        rawInput: '',
-        min: 0,
-        max: 1 // Default max is 1
-      }))
-    )
     setBonusTextInput('')
     setTickets([])
     setTicketBonuses([])
@@ -193,50 +169,6 @@ export function WheelBuilderTab({ gameConfig }) {
     setFixedBonusNumbers(numbers)
   }
 
-  // Toggle number in a group (Exclusive selection)
-  const toggleGroupNumber = (groupId, num) => {
-    setGroupConstraints(prev => prev.map(g => {
-      if (g.id !== groupId) return g
-
-      const isSelected = g.numbers.includes(num)
-      let newNumbers
-      if (isSelected) {
-        newNumbers = g.numbers.filter(n => n !== num)
-      } else {
-        newNumbers = [...g.numbers, num].sort((a, b) => a - b)
-      }
-      return { ...g, numbers: newNumbers }
-    }))
-  }
-
-  // Update Min/Max for a group
-  const updateGroupConstraint = (id, field, value) => {
-    const val = parseInt(value, 10)
-    if (isNaN(val) || val < 0) return
-
-    setGroupConstraints(prev => prev.map(g => {
-      if (g.id !== id) return g
-
-      let newData = { ...g }
-
-      if (field === 'min') {
-        newData.min = val
-        // If new min is greater than current max, increase max to match
-        if (val > g.max) {
-          newData.max = val
-        }
-      } else if (field === 'max') {
-        newData.max = val
-        // If new max is less than current min, decrease min to match
-        if (val < g.min) {
-          newData.min = val
-        }
-      }
-
-      return newData
-    }))
-  }
-
   // Apply text input to pool
   const applyTextInput = () => {
     const numbers = textInput
@@ -295,21 +227,10 @@ export function WheelBuilderTab({ gameConfig }) {
         lowerBound: 0,
         universeSize: 0,
         allTickets: 0,
-        hasActiveConstraints: false,
       }
     }
-
-    // Check if group constraints are active and meaningful
-    const hasActiveConstraints = isGroupConstraintsEnabled &&
-      groupConstraints.some(g => g.numbers.length > 0 && (g.min > 0 || g.max < k))
-
-    const baseStats = calculateWheelStats(variablePoolSize, variableK, variableM)
-
-    return {
-      ...baseStats,
-      hasActiveConstraints,
-    }
-  }, [selectedPool, fixedNumbers, guarantee, k, isGroupConstraintsEnabled, groupConstraints])
+    return calculateWheelStats(variablePoolSize, variableK, variableM)
+  }, [selectedPool, fixedNumbers, guarantee, k])
 
   // Paginated tickets
   const paginatedTickets = useMemo(() => {
@@ -412,7 +333,6 @@ export function WheelBuilderTab({ gameConfig }) {
           scanCount,
           mode,
           fixedNumbers,
-          groupConstraints: isGroupConstraintsEnabled ? groupConstraints : [],
         }),
       })
 
@@ -723,130 +643,6 @@ export function WheelBuilderTab({ gameConfig }) {
         )}
       </section>
 
-      <section className={`relative transition-all duration-300 border-2 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl ${isGroupConstraintsEnabled
-        ? 'bg-slate-900/80 backdrop-blur-xl border-slate-700'
-        : 'bg-slate-900/60 backdrop-blur-xl border-slate-800'
-        }`}>
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h2 className={`text-xl sm:text-2xl font-bold bg-gradient-to-r bg-clip-text text-transparent transition-all ${isGroupConstraintsEnabled
-              ? 'from-cyan-400 to-blue-500'
-              : 'from-cyan-400/50 to-blue-500/50'
-              }`}>
-              Group Constraints
-            </h2>
-            <p className="text-slate-400 text-xs sm:text-sm">
-              Divide numbers into groups and set Min/Max occurrences.
-            </p>
-          </div>
-
-          <button
-            onClick={() => setIsGroupConstraintsEnabled(!isGroupConstraintsEnabled)}
-            className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${isGroupConstraintsEnabled ? 'bg-cyan-600' : 'bg-slate-700'
-              }`}
-          >
-            <span className="sr-only">Enable Group Constraints</span>
-            <span
-              className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${isGroupConstraintsEnabled ? 'translate-x-7' : 'translate-x-1'
-                }`}
-            />
-          </button>
-        </div>
-
-        {/* Info box explaining what group constraints do */}
-        {isGroupConstraintsEnabled && (
-          <div className="mb-4 p-3 bg-cyan-900/20 border border-cyan-700/30 rounded-lg">
-            <div className="flex items-start gap-2">
-              <svg className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
-              </svg>
-              <div className="text-xs text-cyan-100 leading-relaxed">
-                <p className="font-semibold mb-1">How Group Constraints Work:</p>
-                <p className="text-cyan-200/90">
-                  Organize your numbers into groups (e.g., Group 0: hot numbers, Group 1: cold numbers).
-                  Set Min/Max to control how many numbers from each group appear in <strong>every ticket</strong>.
-                  For example: "Min: 2, Max: 3" means each ticket must have 2-3 numbers from that group.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {isGroupConstraintsEnabled && (
-          <div className="animate-in fade-in slide-in-from-top-4 duration-300">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-              {groupConstraints.map((group) => (
-                <div key={group.id} className="p-3 bg-slate-800/50 border border-slate-700 rounded-xl">
-                  <div className="flex justify-between items-center mb-2">
-                    <span className="font-bold text-slate-200 text-sm">Group {group.id}</span>
-                    <span className="text-xs text-slate-500">{group.numbers.length} nums</span>
-                  </div>
-
-                  {/* Exclusive Number Selection Grid */}
-                  <div className="mb-3">
-                    <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Select Numbers</p>
-                    <div className="flex flex-wrap gap-1">
-                      {selectedPool.map(num => {
-                        // Check if this number is taken by ANY OTHER group
-                        const takenByOther = groupConstraints.some(g => g.id !== group.id && g.numbers.includes(num))
-
-                        // If taken by other, hide it (as requested: "removed from selection")
-                        if (takenByOther) return null
-
-                        const isSelected = group.numbers.includes(num)
-
-                        return (
-                          <button
-                            key={num}
-                            onClick={() => toggleGroupNumber(group.id, num)}
-                            className={`w-8 h-8 flex items-center justify-center rounded text-xs font-bold transition-all ${isSelected
-                              ? 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg scale-105'
-                              : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-slate-200'
-                              }`}
-                          >
-                            {num}
-                          </button>
-                        )
-                      })}
-                      {/* Show placeholder if no numbers available */}
-                      {selectedPool.every(num => groupConstraints.some(g => g.id !== group.id && g.numbers.includes(num)) && !group.numbers.includes(num)) && (
-                        <span className="text-xs text-slate-600 italic">No available numbers</span>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Min/Max Controls */}
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1">
-                      <label className="block text-[10px] uppercase text-slate-500 font-bold mb-1">Min</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max={k}
-                        value={group.min}
-                        onChange={(e) => updateGroupConstraint(group.id, 'min', e.target.value)}
-                        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-slate-200 text-xs focus:border-cyan-500 focus:outline-none"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <label className="block text-[10px] uppercase text-slate-500 font-bold mb-1">Max</label>
-                      <input
-                        type="number"
-                        min="0"
-                        max={k}
-                        value={group.max}
-                        onChange={(e) => updateGroupConstraint(group.id, 'max', e.target.value)}
-                        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-slate-200 text-xs focus:border-cyan-500 focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-      </section>
-
       {/* Configuration Card */}
       <section className="relative bg-slate-900/80 backdrop-blur-xl border-2 border-slate-800 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl">
         <h2 className="text-xl sm:text-2xl font-bold mb-3 sm:mb-4 bg-gradient-to-r from-cyan-400 to-blue-500 bg-clip-text text-transparent">
@@ -996,26 +792,13 @@ export function WheelBuilderTab({ gameConfig }) {
 
       {/* Statistics */}
       {selectedPool.length >= k && (
-        <>
-          {stats.hasActiveConstraints && (
-            <div className="mb-3 p-3 bg-amber-900/20 border border-amber-700/30 rounded-lg flex items-start gap-2">
-              <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-              <div className="text-xs text-amber-200 leading-relaxed">
-                <strong>Group Constraints Active:</strong> Statistics shown below are calculated without considering group constraints.
-                The actual search space may be significantly smaller, resulting in fewer valid ticket combinations.
-              </div>
-            </div>
-          )}
-          <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
-            <StatCard label="Pool Size (n)" value={selectedPool.length} />
-            <StatCard label="Fixed Numbers" value={fixedNumbers.length} />
-            <StatCard label="Variable Spots" value={k - fixedNumbers.length} />
-            <StatCard label="Guarantee" value={`${guarantee} / ${k}`} />
-            <StatCard label="Lower Bound" value={stats.lowerBound.toLocaleString()} />
-          </section>
-        </>
+        <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
+          <StatCard label="Pool Size (n)" value={selectedPool.length} />
+          <StatCard label="Fixed Numbers" value={fixedNumbers.length} />
+          <StatCard label="Variable Spots" value={k - fixedNumbers.length} />
+          <StatCard label="Guarantee" value={`${guarantee} / ${k}`} />
+          <StatCard label="Lower Bound" value={stats.lowerBound.toLocaleString()} />
+        </section>
       )}
 
       {/* Tickets Display */}
