@@ -341,14 +341,14 @@ export function WheelBuilderTab({ gameConfig }) {
   }
 
   // Submit proof verification job
-  const verifyProof = async (pool, k, m, tickets) => {
+  const verifyProof = async (pool, k, m, tickets, constraints) => {
     setProofStatus({ status: 'queued', progress: 0, total: 0 })
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/verify-proof`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ pool, k, m, tickets }),
+        body: JSON.stringify({ pool, k, m, tickets, groupConstraints: constraints }),
       })
 
       const { jobId } = await response.json()
@@ -432,7 +432,14 @@ export function WheelBuilderTab({ gameConfig }) {
       setLoadingMessage('Verifying coverage proof...')
 
       // Submit proof verification to backend
-      await verifyProof(selectedPool, k, m, data.tickets)
+      // Submit proof verification to backend
+      await verifyProof(
+        selectedPool,
+        k,
+        m,
+        data.tickets,
+        isGroupConstraintsEnabled ? groupConstraints : []
+      )
     } catch (error) {
       console.error('Error generating tickets:', error)
       alert(`Error: ${error.message}. Make sure to run: npm run dev:server`)
