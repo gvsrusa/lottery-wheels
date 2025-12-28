@@ -247,83 +247,83 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
     return ticket.sort((a,b) => a-b)
   }
 
-  // --- Standard Greedy Logic ---
+  // --- Coverage Strategy Logic ---
   const totalM = nCk(n, m)
   const exact = totalM <= HARD_EXACT_BUILD
 
+  // User Feedback: Strict Combinatorial Coverage is preferred over "Lotto Design" optimization.
+  // Users expect to see specific M-tuples covered if they are valid.
+  // We strictly use Combinatorial Mode but with robust "Impossible Tuple" filtering (Slack Check).
+  
   let uncovered = null
-  const chooseIdx = kCombinations(
+  let chooseIdx = null
+  const mPerTicket = nCk(k, m)
+
+  if (totalM <= HARD_EXACT_BUILD) {
+     // Create M-Combinations target
+     const allTuples = kCombinations(pool, m)
+     // Filter out impossible tuples using robust slack check
+     const validTuples = allTuples.filter(isTupleCoverable)
+     uncovered = new Set(validTuples.map(serialize))
+  }
+  
+  chooseIdx = kCombinations(
     Array.from({ length: k }, (_, i) => i),
     m
   )
-
+  
   // Helper: Validity checker for tuples (Updated with Capacity/Slack Check)
   function isTupleCoverable(tuple) {
     let requiredSlots = 0
     let totalSlack = 0
     
     for (const g of activeGroups) {
-      // Count how many from this group are ALREADY in the tuple
       const count = tuple.reduce((sum, n) => g.nums.includes(n) ? sum + 1 : sum, 0)
-      
-      // 1. Max Violation
       if (count > g.max) return false
-      
-      // 2. Min Requirement
       const needed = Math.max(0, g.min - count)
       requiredSlots += needed
-      
-      // 3. Slack (Capacity remaining after satisfying Min/Needed)
       const slack = g.max - Math.max(count, g.min)
       totalSlack += slack
     }
-    
-    const usedSlots = tuple.length
-    const totalRequired = usedSlots + requiredSlots
-    
-    // Check 1: Do we overshoot K just by meeting mins?
+    const totalRequired = tuple.length + requiredSlots
     if (totalRequired > k) return false
-    
-    // Check 2: Do we have enough capacity to fill the REST of K?
     const toFill = k - totalRequired
     if (toFill > totalSlack) return false
-    
     return true
-  }
-
-  if (exact) {
-    const allTuples = kCombinations(pool, m)
-    const validTuples = allTuples.filter(isTupleCoverable)
-    uncovered = new Set(validTuples.map(serialize))
   }
 
   const tickets = []
   const seen = new Set()
-  const mPerTicket = nCk(k, m)
 
   let steps = 0
   const maxSteps = 200000
 
+  // GAIN FUNCTION (Combinatorial Only)
   function gain(t) {
-    if (!exact) return mPerTicket
-    let g = 0
-    for (const idx of chooseIdx) {
-      const sub = idx.map((i) => t[i])
-      if (uncovered.has(serialize(sub))) g += 1
-    }
-    return g
+      if (!exact) return mPerTicket
+      if (!uncovered) return mPerTicket // Approximate mode fallback
+      
+      let g = 0
+      for (const idx of chooseIdx) {
+          const sub = idx.map((i) => t[i])
+          if (uncovered.has(serialize(sub))) g += 1
+      }
+      return g
   }
 
   while (true) {
     if (limit != null && tickets.length >= limit) break
-    if (exact && uncovered.size === 0 && limit === null) break
+    if (uncovered && uncovered.size === 0 && limit === null) break // Coverage complete
     if (steps >= maxSteps) break
     steps += 1
 
     let best = null
     let bestGain = -1
-
-    for (let i = 0; i < effort; i += 1) {
+    
+    // Standard Greedy: Generate random valid tickets
+    const effortValid = Math.max(10, effort) // Ensure minimum effort
+    
+    for (let i = 0; i < effortValid; i += 1) {
       const cand = randomValidTicket()
       if (!cand) continue
       
@@ -338,6 +338,7 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
       }
     }
     
+    // Fallback if no candidate worked
     if (!best) {
        const fallback = randomValidTicket()
        if(fallback && !seen.has(serialize(fallback))) {
@@ -349,11 +350,12 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
       tickets.push(best)
       seen.add(serialize(best))
 
-      if (exact) {
-        for (const idx of chooseIdx) {
-          const sub = idx.map((i) => best[i])
-          uncovered.delete(serialize(sub))
-        }
+      // Update Coverage (Combinatorial)
+      if (exact && uncovered) {
+          for (const idx of chooseIdx) {
+            const sub = idx.map((i) => best[i])
+            uncovered.delete(serialize(sub))
+          }
       }
     } else {
       break
