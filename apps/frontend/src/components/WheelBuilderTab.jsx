@@ -295,10 +295,21 @@ export function WheelBuilderTab({ gameConfig }) {
         lowerBound: 0,
         universeSize: 0,
         allTickets: 0,
+        hasActiveConstraints: false,
       }
     }
-    return calculateWheelStats(variablePoolSize, variableK, variableM)
-  }, [selectedPool, fixedNumbers, guarantee, k])
+
+    // Check if group constraints are active and meaningful
+    const hasActiveConstraints = isGroupConstraintsEnabled &&
+      groupConstraints.some(g => g.numbers.length > 0 && (g.min > 0 || g.max < k))
+
+    const baseStats = calculateWheelStats(variablePoolSize, variableK, variableM)
+
+    return {
+      ...baseStats,
+      hasActiveConstraints,
+    }
+  }, [selectedPool, fixedNumbers, guarantee, k, isGroupConstraintsEnabled, groupConstraints])
 
   // Paginated tickets
   const paginatedTickets = useMemo(() => {
@@ -985,13 +996,26 @@ export function WheelBuilderTab({ gameConfig }) {
 
       {/* Statistics */}
       {selectedPool.length >= k && (
-        <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
-          <StatCard label="Pool Size (n)" value={selectedPool.length} />
-          <StatCard label="Fixed Numbers" value={fixedNumbers.length} />
-          <StatCard label="Variable Spots" value={k - fixedNumbers.length} />
-          <StatCard label="Guarantee" value={`${guarantee} / ${k}`} />
-          <StatCard label="Lower Bound" value={stats.lowerBound.toLocaleString()} />
-        </section>
+        <>
+          {stats.hasActiveConstraints && (
+            <div className="mb-3 p-3 bg-amber-900/20 border border-amber-700/30 rounded-lg flex items-start gap-2">
+              <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <div className="text-xs text-amber-200 leading-relaxed">
+                <strong>Group Constraints Active:</strong> Statistics shown below are calculated without considering group constraints.
+                The actual search space may be significantly smaller, resulting in fewer valid ticket combinations.
+              </div>
+            </div>
+          )}
+          <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
+            <StatCard label="Pool Size (n)" value={selectedPool.length} />
+            <StatCard label="Fixed Numbers" value={fixedNumbers.length} />
+            <StatCard label="Variable Spots" value={k - fixedNumbers.length} />
+            <StatCard label="Guarantee" value={`${guarantee} / ${k}`} />
+            <StatCard label="Lower Bound" value={stats.lowerBound.toLocaleString()} />
+          </section>
+        </>
       )}
 
       {/* Tickets Display */}
