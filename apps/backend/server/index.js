@@ -142,6 +142,43 @@ function calculateWheelStats(n, k, m) {
  * Generate a greedy lottery wheel
  */
 /**
+ * Helper: Check if a tuple (m-subset) can possibly be part of a valid k-ticket under constraints
+ * Returns true if coverable, false otherwise.
+ */
+function checkTupleConstraints(tuple, activeGroups, k) {
+  let requiredSlots = 0
+  let totalSlack = 0
+  
+  for (const g of activeGroups) {
+    // Check if tuple violates max constraint immediately
+    const count = tuple.reduce((sum, n) => g.nums.includes(n) ? sum + 1 : sum, 0)
+    if (count > g.max) return false
+
+    // Calculate how many MORE numbers this group MUST provide to meet min
+    const needed = Math.max(0, g.min - count)
+    requiredSlots += needed
+
+    // Calculate how many MORE numbers this group COULD provide (slack)
+    const slack = g.max - Math.max(count, g.min)
+    totalSlack += slack
+  }
+
+  // Total spots used by tuple + spots REQUIRED by constraints
+  const totalRequired = tuple.length + requiredSlots
+  
+  // If we need more spots than k, it's impossible
+  if (totalRequired > k) return false
+  
+  // Remaining free spots to fill up to k
+  const toFill = k - totalRequired
+  
+  // If we have less slack (optional spots) than needed to fill the ticket, it's impossible
+  if (toFill > totalSlack) return false
+  
+  return true
+}
+
+/**
  * Generate a greedy lottery wheel with Group Constraints
  */
 function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
@@ -273,23 +310,9 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
   )
   
   // Helper: Validity checker for tuples (Updated with Capacity/Slack Check)
+  // Helper: Validity checker using the shared function
   function isTupleCoverable(tuple) {
-    let requiredSlots = 0
-    let totalSlack = 0
-    
-    for (const g of activeGroups) {
-      const count = tuple.reduce((sum, n) => g.nums.includes(n) ? sum + 1 : sum, 0)
-      if (count > g.max) return false
-      const needed = Math.max(0, g.min - count)
-      requiredSlots += needed
-      const slack = g.max - Math.max(count, g.min)
-      totalSlack += slack
-    }
-    const totalRequired = tuple.length + requiredSlots
-    if (totalRequired > k) return false
-    const toFill = k - totalRequired
-    if (toFill > totalSlack) return false
-    return true
+    return checkTupleConstraints(tuple, activeGroups, k)
   }
 
   const tickets = []
@@ -409,8 +432,42 @@ function exactUniverseTickets(pool, k, constraints = []) {
 /**
  * Calculate coverage breakdown
  */
-function calculateCoverageBreakdown(pool, tickets, k, minMatch = 2) {
+function calculateCoverageBreakdown(pool, tickets, k, minMatch = 2, constraints = []) {
   const breakdown = []
+
+  // --- Prepare Constraints ---
+  let activeGroups = []
+  let hasConstraints = false
+  
+  if (constraints && constraints.length > 0) {
+    const poolSet = new Set(pool)
+    const usedNumbers = new Set()
+    
+    constraints.forEach(c => {
+      const groupNums = c.numbers.filter(num => poolSet.has(num))
+      if (groupNums.length > 0) {
+        activeGroups.push({
+          id: c.id,
+          nums: groupNums,
+          min: c.min,
+          max: c.max
+        })
+        groupNums.forEach(n => usedNumbers.add(n))
+      }
+    })
+    
+    const remainderNums = pool.filter(n => !usedNumbers.has(n))
+    if (remainderNums.length > 0) {
+      activeGroups.push({
+        id: 'remainder',
+        nums: remainderNums,
+        min: 0,
+        max: remainderNums.length 
+      })
+    }
+    hasConstraints = activeGroups.length > 0
+  }
+  // ---------------------------
 
   // For each match level from k down to minMatch
   for (let matchLevel = k; matchLevel >= minMatch; matchLevel--) {
@@ -418,9 +475,36 @@ function calculateCoverageBreakdown(pool, tickets, k, minMatch = 2) {
     const poolSubsets = kCombinations(pool, matchLevel)
 
     let minWinningTickets = Infinity
+    let validScenariosCount = 0
 
     // For each scenario, count how many tickets win
     for (const drawnFromPool of poolSubsets) {
+       // If constraints are active, ignore scenarios that are impossible to draw
+       if (hasConstraints) {
+         // Note: checkTupleConstraints expects (tuple, groups, k). 
+         // Here, the "tuple" is the drawn numbers (size matchLevel). 
+         // BUT checkTupleConstraints checks if a tuple fits into a K-ticket.
+         // A DRAW of size matchLevel is just a subset of the winning numbers.
+         // If the draw ITSELF violates the Max constraints of a group, it's impossible.
+         // e.g. Group A Max=1. Draw has {1, 2} from Group A. Impossible.
+         
+         // Let's do a direct check for MAX constraints only. 
+         // We can't strictly check MIN constraints on a subset draw because the other (k - matchLevel) numbers might fill the min.
+         // HOWEVER, if the drawn subset already EXCEEDS the max, it's impossible.
+         
+         let possible = true
+         for(const g of activeGroups) {
+            const count = drawnFromPool.reduce((sum, n) => g.nums.includes(n) ? sum + 1 : sum, 0)
+            if (count > g.max) {
+               possible = false; 
+               break; 
+            }
+         }
+         if (!possible) continue
+       }
+       
+       validScenariosCount++
+
       let winningCount = 0
 
       for (const ticket of tickets) {
@@ -433,6 +517,9 @@ function calculateCoverageBreakdown(pool, tickets, k, minMatch = 2) {
 
       minWinningTickets = Math.min(minWinningTickets, winningCount)
     }
+    
+    // If no valid scenarios existed (edge case), don't report Infinity
+    if (validScenariosCount === 0) minWinningTickets = 0
 
     breakdown.push({
       level: `${matchLevel}/${k}`,
@@ -514,12 +601,51 @@ function* allComb(n, m) {
 /**
  * Verify coverage proof (background job)
  */
-async function verifyCoverage(jobId, pool, k, m, tickets) {
+/**
+ * Verify coverage proof (background job)
+ */
+async function verifyCoverage(jobId, pool, k, m, tickets, constraints = []) {
   const job = proofQueue.get(jobId)
   if (!job) return
 
   try {
     const n = pool.length
+    
+    // --- Setup Constraints for Verification ---
+    let activeGroups = []
+    let hasConstraints = false
+    
+    if (constraints && constraints.length > 0) {
+      const poolSet = new Set(pool)
+      const usedNumbers = new Set()
+      
+      constraints.forEach(c => {
+        const groupNums = c.numbers.filter(num => poolSet.has(num))
+        if (groupNums.length > 0) {
+          activeGroups.push({
+            id: c.id,
+            nums: groupNums,
+            min: c.min,
+            max: c.max
+          })
+          groupNums.forEach(n => usedNumbers.add(n))
+        }
+      })
+      
+       // create Remainder Group for completeness
+       const remainderNums = pool.filter(n => !usedNumbers.has(n))
+       if (remainderNums.length > 0) {
+         activeGroups.push({
+           id: 'remainder',
+           nums: remainderNums,
+           min: 0,
+           max: remainderNums.length 
+         })
+       }
+       hasConstraints = activeGroups.length > 0
+    }
+    // ------------------------------------------
+
     const total = nCk(n, m)
     const B = buildBinom(n, m)
 
@@ -551,17 +677,35 @@ async function verifyCoverage(jobId, pool, k, m, tickets) {
 
     // Check for uncovered m-subsets
     let uncoveredCount = 0
+    let totalCoverable = 0 // Track actually coverable tuples
     const samples = []
     let done = 0
     const step = 50000
 
     for (const comb of allComb(n, m)) {
+      const currentTuple = comb.map((idx) => pool[idx - 1])
+      
+      // Constraint Check: If tuple is impossible, skip it (don't count as uncovered)
+      if (hasConstraints && !checkTupleConstraints(currentTuple, activeGroups, k)) {
+        done += 1
+         // Update progress
+        if (done % step === 0) {
+          job.progress = done
+          job.total = total
+          job.status = 'processing'
+          await new Promise((resolve) => setImmediate(resolve))
+        }
+        continue
+      }
+      
+      totalCoverable++ // It's a valid tuple, so it SHOULD be covered
+
       const r = rankIndices(comb.map((x) => x - 1)) // allComb generates 1-indexed, need 0-indexed
       if (covered[r] !== 1) {
         uncoveredCount += 1
         if (samples.length < 50) {
           // Convert back to actual numbers for display
-          samples.push(comb.map((idx) => pool[idx - 1]))
+          samples.push(currentTuple)
         }
       }
       done += 1
@@ -583,7 +727,8 @@ async function verifyCoverage(jobId, pool, k, m, tickets) {
       pass: uncoveredCount === 0,
       uncoveredCount,
       samples,
-      total,
+      total: totalCoverable, // Report coverable total instead of raw total
+      rawTotal: total
     }
   } catch (error) {
     job.status = 'error'
@@ -726,7 +871,8 @@ app.post('/api/generate-tickets', async (req, res) => {
        // We need to reconstruct variable tickets since we already appended fixed numbers
        const varTickets = tickets.map(t => t.filter(n => !fixedSet.has(n)))
        // Use minMatch=1 for variable part so we can show "fixed+1 if fixed+1"
-       const varBreakdown = calculateCoverageBreakdown(variablePool, varTickets, variableK, 1)
+       // We pass variableConstraints here because these are the constraints applied to the VARIABLE pool
+       const varBreakdown = calculateCoverageBreakdown(variablePool, varTickets, variableK, 1, variableConstraints)
        
        // Remap levels: e.g. 3/3 (var) -> 4/4 (total) if fixed=1
        coverageBreakdown = varBreakdown.map(item => {
@@ -737,7 +883,7 @@ app.post('/api/generate-tickets', async (req, res) => {
          }
        })
     } else {
-       coverageBreakdown = calculateCoverageBreakdown(pool, tickets, k)
+       coverageBreakdown = calculateCoverageBreakdown(pool, tickets, k, 2, groupConstraints)
     }
 
     res.json({
@@ -771,7 +917,7 @@ app.post('/api/calculate-stats', (req, res) => {
 
 // API: Submit proof verification job
 app.post('/api/verify-proof', async (req, res) => {
-  const { pool, k, m, tickets } = req.body
+  const { pool, k, m, tickets, groupConstraints } = req.body
 
   if (!pool || !k || !m || !tickets) {
     return res.status(400).json({ error: 'Missing required parameters' })
@@ -789,7 +935,7 @@ app.post('/api/verify-proof', async (req, res) => {
   })
 
   // Start processing in background
-  verifyCoverage(jobId, pool, k, m, tickets)
+  verifyCoverage(jobId, pool, k, m, tickets, groupConstraints)
 
   res.json({ jobId })
 })
