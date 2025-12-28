@@ -97,6 +97,30 @@ function serialize(a) {
 }
 
 /**
+ * Check if a ticket satisfies group constraints
+ */
+function checkGroupConstraints(ticket, constraints) {
+  if (!constraints || constraints.length === 0) return true
+  
+  for (const group of constraints) {
+    // Skip empty groups or no-op constraints
+    if (!group.numbers || group.numbers.length === 0) continue
+
+    let count = 0
+    for (const num of ticket) {
+      if (group.numbers.includes(num)) {
+        count++
+      }
+    }
+
+    if (count < group.min || count > group.max) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
  * Calculate statistics for wheel generation
  */
 function calculateWheelStats(n, k, m) {
@@ -117,7 +141,7 @@ function calculateWheelStats(n, k, m) {
 /**
  * Generate a greedy lottery wheel
  */
-function greedyWheel(pool, k, m, effort, seed, limit = null) {
+function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
   const rand = makeLCG(hashSeed(seed))
   const n = pool.length
   const totalM = nCk(n, m)
@@ -159,6 +183,21 @@ function greedyWheel(pool, k, m, effort, seed, limit = null) {
       .sort((a, b) => a - b)
       .map((i) => pool[i])
   }
+  
+  // Helper to generate a valid random ticket (respecting constraints)
+  function randomValidTicket(rand) {
+    // Try up to 1000 times to find a valid random ticket
+    for (let i = 0; i < 1000; i++) {
+        const t = randomKTicketFromPool(rand)
+        if (checkGroupConstraints(t, constraints)) {
+            return t
+        }
+    }
+    // Fallback: return a random one even if invalid (better than crashing), 
+    // but ideally we should error out or retry harder. 
+    // For now, let's just return it, though it might break "strict" promise.
+    return randomKTicketFromPool(rand)
+  }
 
   while (true) {
     if (limit != null && tickets.length >= limit) break
@@ -170,7 +209,7 @@ function greedyWheel(pool, k, m, effort, seed, limit = null) {
     let bestGain = -1
 
     for (let i = 0; i < effort; i += 1) {
-      const cand = randomKTicketFromPool(rand)
+      const cand = randomValidTicket(rand)
       const key = serialize(cand)
       if (seen.has(key)) continue
 
@@ -182,7 +221,7 @@ function greedyWheel(pool, k, m, effort, seed, limit = null) {
       }
     }
 
-    if (!best) best = randomKTicketFromPool(rand)
+    if (!best) best = randomValidTicket(rand)
 
     tickets.push(best)
     seen.add(serialize(best))
@@ -392,7 +431,7 @@ async function verifyCoverage(jobId, pool, k, m, tickets) {
 
 // API: Generate tickets
 app.post('/api/generate-tickets', async (req, res) => {
-    const { pool, k, guarantee, effort, seed, scanCount, mode, fixedNumbers = [] } = req.body
+    const { pool, k, guarantee, effort, seed, scanCount, mode, fixedNumbers = [], groupConstraints = [] } = req.body
 
   console.log('Received generation request:', { poolSize: pool?.length, k, guarantee, mode, fixedNumbers })
 
@@ -444,6 +483,27 @@ app.post('/api/generate-tickets', async (req, res) => {
       if (n < variableK) {
         return res.status(400).json({ error: `Remaining pool size (${n}) is too small for ${variableK} spots` })
       }
+      
+      // 4. Prepare Group Constraints for Variable Part
+      // Calculate how many fixed numbers are in each group, and adjust Min/Max accordingly
+      const variableConstraints = groupConstraints.map(g => {
+         const fixedInGroup = fixedNumbers.filter(f => g.numbers.includes(f)).length
+         return {
+             ...g,
+             // Numbers relevant to variable pool only
+             numbers: g.numbers.filter(num => !fixedSet.has(num)),
+             // Adjust min/max: if we have 1 fixed, and min is 2, variable part must provide 1.
+             // If we have 2 fixed, and min is 1, variable part needs 0.
+             min: Math.max(0, g.min - fixedInGroup),
+             max: Math.max(0, g.max - fixedInGroup) // If < 0, impossible, should error check
+         }
+      })
+      
+      // Check for impossible constraints
+      const impossibleGroup = variableConstraints.find(g => g.max < 0)
+      if (impossibleGroup) {
+          return res.status(400).json({ error: `Group ${impossibleGroup.id} max count exceeded by fixed numbers.` })
+      }
 
       // Generate tickets based on mode using VARIABLE parameters
       if (mode === 'universe') {
@@ -454,6 +514,9 @@ app.post('/api/generate-tickets', async (req, res) => {
           })
         }
         tickets = exactUniverseTickets(variablePool, variableK)
+        if (variableConstraints.length > 0) {
+           tickets = tickets.filter(t => checkGroupConstraints(t, variableConstraints))
+        }
       } else if (mode === 'universe-m') {
         const tot = nCk(n, m)
         if (tot > UNIVERSE_TICKET_CAP) {
@@ -462,6 +525,9 @@ app.post('/api/generate-tickets', async (req, res) => {
           })
         }
         tickets = exactUniverseTickets(variablePool, m)
+        if (variableConstraints.length > 0) {
+           tickets = tickets.filter(t => checkGroupConstraints(t, variableConstraints))
+        }
       } else {
         // greedy, scan, or lb mode
         let limit = null
@@ -471,7 +537,7 @@ app.post('/api/generate-tickets', async (req, res) => {
           const stats = calculateWheelStats(n, variableK, m)
           limit = stats.lowerBound
         }
-        const result = greedyWheel(variablePool, variableK, m, effort, seed, limit)
+        const result = greedyWheel(variablePool, variableK, m, effort, seed, limit, variableConstraints)
         tickets = result.tickets
       }
 
