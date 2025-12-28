@@ -97,6 +97,30 @@ function serialize(a) {
 }
 
 /**
+ * Check if a ticket satisfies group constraints
+ */
+function checkGroupConstraints(ticket, constraints) {
+  if (!constraints || constraints.length === 0) return true
+  
+  for (const group of constraints) {
+    // Skip empty groups or no-op constraints
+    if (!group.numbers || group.numbers.length === 0) continue
+
+    let count = 0
+    for (const num of ticket) {
+      if (group.numbers.includes(num)) {
+        count++
+      }
+    }
+
+    if (count < group.min || count > group.max) {
+      return false
+    }
+  }
+  return true
+}
+
+/**
  * Calculate statistics for wheel generation
  */
 function calculateWheelStats(n, k, m) {
@@ -117,60 +141,192 @@ function calculateWheelStats(n, k, m) {
 /**
  * Generate a greedy lottery wheel
  */
-function greedyWheel(pool, k, m, effort, seed, limit = null) {
+/**
+ * Generate a greedy lottery wheel with Group Constraints
+ */
+function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
   const rand = makeLCG(hashSeed(seed))
   const n = pool.length
+  
+  // If no constraints, legacy behavior
+  if (!constraints || constraints.length === 0) {
+     const totalM = nCk(n, m)
+     const exact = totalM <= HARD_EXACT_BUILD
+     // Legacy Fallback logic if needed, but we can just use the new system with no groups.
+     // However, for pure performance, we might want to keep simple path if exact match legacy speed is needed.
+     // But let's unify for consistency.
+  }
+
+  // 1. Setup Groups for Variable Pool
+  const poolSet = new Set(pool)
+  const activeGroups = []
+  const usedNumbers = new Set() 
+  
+  constraints.forEach(c => {
+    // Intersect group numbers with Variable Pool
+    const groupNums = c.numbers.filter(num => poolSet.has(num))
+    
+    if (groupNums.length > 0) {
+      activeGroups.push({
+        id: c.id,
+        nums: groupNums,
+        min: c.min,
+        max: c.max
+      })
+      groupNums.forEach(n => usedNumbers.add(n))
+    }
+  })
+  
+  // create Remainder Group
+  const remainderNums = pool.filter(n => !usedNumbers.has(n))
+  if (remainderNums.length > 0) {
+    activeGroups.push({
+      id: 'remainder',
+      nums: remainderNums,
+      min: 0,
+      max: remainderNums.length 
+    })
+  }
+
+  // Check if constraints are valid
+  const globalMin = activeGroups.reduce((sum, g) => sum + g.min, 0)
+  const globalMax = activeGroups.reduce((sum, g) => sum + g.max, 0)
+
+  if (globalMin > k) {
+    throw new Error(`Impossible constraints: Minimums sum to ${globalMin}, but only ${k} spots available.`)
+  }
+  if (globalMax < k) {
+    throw new Error(`Impossible constraints: Maximums sum to ${globalMax}, but need to fill ${k} spots.`)
+  }
+
+  // Helper to generate a random valid quota distribution
+  function generateRandomQuotas() {
+    const quotas = activeGroups.map(g => g.min)
+    let currentSum = globalMin
+    let attempt = 0
+    
+    while (currentSum < k && attempt < 1000) {
+       attempt++
+       const idx = Math.floor(rand() * activeGroups.length)
+       const g = activeGroups[idx]
+       
+       if (quotas[idx] < g.max && quotas[idx] < g.nums.length) {
+         quotas[idx]++
+         currentSum++
+       }
+    }
+    
+    if (currentSum !== k) return null 
+    return quotas
+  }
+
+  // Helper: Generate a random valid ticket
+  function randomValidTicket() {
+    const quotas = generateRandomQuotas()
+    if (!quotas) return null
+    
+    let ticket = []
+    
+    for (let i = 0; i < activeGroups.length; i++) {
+      const g = activeGroups[i]
+      const count = quotas[i]
+      if (count === 0) continue
+      
+      const picked = []
+      const available = [...g.nums]
+      
+      for(let j=0; j<count; j++) {
+         const pickIdx = Math.floor(rand() * available.length)
+         picked.push(available[pickIdx])
+         available[pickIdx] = available[available.length - 1]
+         available.pop()
+      }
+      ticket = ticket.concat(picked)
+    }
+    
+    return ticket.sort((a,b) => a-b)
+  }
+
+  // --- Coverage Strategy Logic ---
   const totalM = nCk(n, m)
   const exact = totalM <= HARD_EXACT_BUILD
 
+  // User Feedback: Strict Combinatorial Coverage is preferred over "Lotto Design" optimization.
+  // Users expect to see specific M-tuples covered if they are valid.
+  // We strictly use Combinatorial Mode but with robust "Impossible Tuple" filtering (Slack Check).
+  
   let uncovered = null
-  const chooseIdx = kCombinations(
+  let chooseIdx = null
+  const mPerTicket = nCk(k, m)
+
+  if (totalM <= HARD_EXACT_BUILD) {
+     // Create M-Combinations target
+     const allTuples = kCombinations(pool, m)
+     // Filter out impossible tuples using robust slack check
+     const validTuples = allTuples.filter(isTupleCoverable)
+     uncovered = new Set(validTuples.map(serialize))
+  }
+  
+  chooseIdx = kCombinations(
     Array.from({ length: k }, (_, i) => i),
     m
   )
-
-  if (exact) {
-    uncovered = new Set(kCombinations(pool, m).map(serialize))
+  
+  // Helper: Validity checker for tuples (Updated with Capacity/Slack Check)
+  function isTupleCoverable(tuple) {
+    let requiredSlots = 0
+    let totalSlack = 0
+    
+    for (const g of activeGroups) {
+      const count = tuple.reduce((sum, n) => g.nums.includes(n) ? sum + 1 : sum, 0)
+      if (count > g.max) return false
+      const needed = Math.max(0, g.min - count)
+      requiredSlots += needed
+      const slack = g.max - Math.max(count, g.min)
+      totalSlack += slack
+    }
+    const totalRequired = tuple.length + requiredSlots
+    if (totalRequired > k) return false
+    const toFill = k - totalRequired
+    if (toFill > totalSlack) return false
+    return true
   }
 
   const tickets = []
   const seen = new Set()
-  const mPerTicket = nCk(k, m)
 
   let steps = 0
   const maxSteps = 200000
 
+  // GAIN FUNCTION (Combinatorial Only)
   function gain(t) {
-    if (!exact) return mPerTicket
-    let g = 0
-    for (const idx of chooseIdx) {
-      const sub = idx.map((i) => t[i])
-      if (uncovered.has(serialize(sub))) g += 1
-    }
-    return g
-  }
-
-  function randomKTicketFromPool(rand) {
-    const indices = new Set()
-    while (indices.size < k) {
-      indices.add(Math.floor(rand() * n))
-    }
-    return Array.from(indices)
-      .sort((a, b) => a - b)
-      .map((i) => pool[i])
+      if (!exact) return mPerTicket
+      if (!uncovered) return mPerTicket // Approximate mode fallback
+      
+      let g = 0
+      for (const idx of chooseIdx) {
+          const sub = idx.map((i) => t[i])
+          if (uncovered.has(serialize(sub))) g += 1
+      }
+      return g
   }
 
   while (true) {
     if (limit != null && tickets.length >= limit) break
-    if (exact && uncovered.size === 0 && limit === null) break
+    if (uncovered && uncovered.size === 0 && limit === null) break // Coverage complete
     if (steps >= maxSteps) break
     steps += 1
 
     let best = null
     let bestGain = -1
-
-    for (let i = 0; i < effort; i += 1) {
-      const cand = randomKTicketFromPool(rand)
+    
+    // Standard Greedy: Generate random valid tickets
+    const effortValid = Math.max(10, effort) // Ensure minimum effort
+    
+    for (let i = 0; i < effortValid; i += 1) {
+      const cand = randomValidTicket()
+      if (!cand) continue
+      
       const key = serialize(cand)
       if (seen.has(key)) continue
 
@@ -181,17 +337,28 @@ function greedyWheel(pool, k, m, effort, seed, limit = null) {
         if (g === mPerTicket) break
       }
     }
+    
+    // Fallback if no candidate worked
+    if (!best) {
+       const fallback = randomValidTicket()
+       if(fallback && !seen.has(serialize(fallback))) {
+         best = fallback
+       }
+    }
 
-    if (!best) best = randomKTicketFromPool(rand)
+    if (best) {
+      tickets.push(best)
+      seen.add(serialize(best))
 
-    tickets.push(best)
-    seen.add(serialize(best))
-
-    if (exact) {
-      for (const idx of chooseIdx) {
-        const sub = idx.map((i) => best[i])
-        uncovered.delete(serialize(sub))
+      // Update Coverage (Combinatorial)
+      if (exact && uncovered) {
+          for (const idx of chooseIdx) {
+            const sub = idx.map((i) => best[i])
+            uncovered.delete(serialize(sub))
+          }
       }
+    } else {
+      break
     }
   }
 
@@ -199,20 +366,54 @@ function greedyWheel(pool, k, m, effort, seed, limit = null) {
 }
 
 /**
- * Generate all possible tickets (universe mode)
+ * Generate all possible tickets (universe mode) with Group Constraints
  */
-function exactUniverseTickets(pool, k) {
-  return kCombinations(pool, k)
+function exactUniverseTickets(pool, k, constraints = []) {
+  // If no constraints, legacy full universe
+  if (!constraints || constraints.length === 0) {
+    return kCombinations(pool, k)
+  }
+
+  // Same group setup as greedyWheel
+  const poolSet = new Set(pool)
+  const activeGroups = []
+  const usedNumbers = new Set() 
+  
+  constraints.forEach(c => {
+    const groupNums = c.numbers.filter(num => poolSet.has(num))
+    if (groupNums.length > 0) {
+      activeGroups.push({
+        id: c.id,
+        nums: new Set(groupNums), // Set for O(1) checking
+        min: c.min,
+        max: c.max
+      })
+      groupNums.forEach(n => usedNumbers.add(n))
+    }
+  })
+  
+  const remainderNums = pool.filter(n => !usedNumbers.has(n))
+  
+  const allTickets = kCombinations(pool, k)
+  
+  return allTickets.filter(ticket => {
+    // Check every group constraint
+    for (const g of activeGroups) {
+      const count = ticket.reduce((sum, num) => g.nums.has(num) ? sum + 1 : sum, 0)
+      if (count < g.min || count > g.max) return false
+    }
+    return true
+  })
 }
 
 /**
  * Calculate coverage breakdown
  */
-function calculateCoverageBreakdown(pool, tickets, k) {
+function calculateCoverageBreakdown(pool, tickets, k, minMatch = 2) {
   const breakdown = []
 
-  // For each match level from k down to 2
-  for (let matchLevel = k; matchLevel >= 2; matchLevel--) {
+  // For each match level from k down to minMatch
+  for (let matchLevel = k; matchLevel >= minMatch; matchLevel--) {
     // Generate all possible scenarios where exactly matchLevel numbers from pool are drawn
     const poolSubsets = kCombinations(pool, matchLevel)
 
@@ -392,54 +593,152 @@ async function verifyCoverage(jobId, pool, k, m, tickets) {
 
 // API: Generate tickets
 app.post('/api/generate-tickets', async (req, res) => {
-  const { pool, k, guarantee, effort, seed, scanCount, mode } = req.body
+    const { pool, k, guarantee, effort, seed, scanCount, mode, fixedNumbers = [], groupConstraints = [] } = req.body
+
+  console.log('Received generation request:', { poolSize: pool?.length, k, guarantee, mode, fixedNumbers })
 
   if (!pool || !k || !guarantee || !effort || !mode) {
+    console.log('Missing parameters')
     return res.status(400).json({ error: 'Missing required parameters' })
   }
 
   try {
-    const n = pool.length
-    const m = guarantee
-    let tickets = []
+      // 1. Validate fixed numbers
+      if (fixedNumbers.length > 0) {
+        // Check if all fixed numbers are in the pool
+        const poolSet = new Set(pool)
+        const invalidFixed = fixedNumbers.filter(n => !poolSet.has(n))
+        if (invalidFixed.length > 0) {
+          return res.status(400).json({ error: `Fixed numbers [${invalidFixed.join(', ')}] are not in the selected pool` })
+        }
+        
+        // Check if too many fixed numbers
+        if (fixedNumbers.length >= k) {
+           return res.status(400).json({ error: `Cannot fix ${fixedNumbers.length} numbers for a pick-${k} game. Max fixed is ${k-1}.` })
+        }
+      }
 
-    // Validate pool size
-    if (n < k) {
-      return res.status(400).json({ error: `Pool must have at least ${k} numbers` })
-    }
+      // 2. Prepare variable pool and k
+      const fixedSet = new Set(fixedNumbers)
+      const variablePool = pool.filter(n => !fixedSet.has(n))
+      const variableK = k - fixedNumbers.length
+      
+      const n = variablePool.length
+      // Guarantee applies to the variable part? 
+      // User requirement: "fix certain numbers". Usually this means:
+      // If I fix 1 number in a Pick 6 game, I need to generate Pick 5 tickets from the remaining pool.
+      // The guarantee "3 if 3" usually implies "3 if 3 matches in the variable part".
+      // Let's stick to the plan: generate wheels for variablePool with variableK.
+      const m = guarantee 
+      
+      // Adjust m if it's larger than variableK (can happen if fixed numbers are many)
+      // e.g. Pick 6, Fix 4, variableK=2. If guarantee=3, it's impossible.
+      if (m > variableK) {
+         return res.status(400).json({ 
+           error: `Guarantee ${m} is too high for the remaining ${variableK} spots (Fixed: ${fixedNumbers.length}). Max guarantee is ${variableK}.` 
+         })
+      }
 
-    // Generate tickets based on mode
-    if (mode === 'universe') {
-      const tot = nCk(n, k)
-      if (tot > UNIVERSE_TICKET_CAP) {
-        return res.status(400).json({
-          error: `Universe mode needs ${tot.toLocaleString()} tickets. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`,
-        })
+      let tickets = []
+
+      // Validate variable pool size
+      if (n < variableK) {
+        return res.status(400).json({ error: `Remaining pool size (${n}) is too small for ${variableK} spots` })
       }
-      tickets = exactUniverseTickets(pool, k)
-    } else if (mode === 'universe-m') {
-      const tot = nCk(n, m)
-      if (tot > UNIVERSE_TICKET_CAP) {
-        return res.status(400).json({
-          error: `Universe C(n,m) mode needs ${tot.toLocaleString()} combinations. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`,
-        })
+      
+      // 4. Prepare Group Constraints for Variable Part
+      // Calculate how many fixed numbers are in each group, and adjust Min/Max accordingly
+      const variableConstraints = []
+      
+      if (groupConstraints && groupConstraints.length > 0) {
+         for(const g of groupConstraints) {
+             // Skip empty or disabled groups
+             if (!g.numbers || g.numbers.length === 0) continue
+             if (g.min === 0 && g.max >= g.numbers.length && g.max >= k) { 
+                 // Effectively no constraint, but let's keep it safe
+             }
+             
+             // Count fixed numbers in this group
+             const fixedInGroup = fixedNumbers.filter(f => g.numbers.includes(f)).length
+             
+             // Adjust Min/Max for variable pool
+             const newMin = Math.max(0, g.min - fixedInGroup)
+             const newMax = g.max - fixedInGroup
+             
+             if (fixedInGroup > g.max) {
+                return res.status(400).json({ 
+                  error: `Group ${g.id} allows max ${g.max} numbers, but you have fixed ${fixedInGroup} numbers from it.` 
+                })
+             }
+             
+             variableConstraints.push({
+               ...g,
+               min: newMin,
+               max: newMax
+               // We don't filter numbers here because greedyWheel does it using the variable pool set
+             })
+         }
       }
-      tickets = exactUniverseTickets(pool, m)
-    } else {
-      // greedy, scan, or lb mode
-      let limit = null
-      if (mode === 'scan') {
-        limit = Math.max(1, scanCount)
-      } else if (mode === 'lb') {
-        const stats = calculateWheelStats(n, k, m)
-        limit = stats.lowerBound
+
+      // Generate tickets based on mode using VARIABLE parameters
+      if (mode === 'universe') {
+        const tot = nCk(n, variableK)
+        if (tot > UNIVERSE_TICKET_CAP) {
+          return res.status(400).json({
+            error: `Universe mode needs ${tot.toLocaleString()} tickets. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`,
+          })
+        }
+        tickets = exactUniverseTickets(variablePool, variableK, variableConstraints)
+      } else if (mode === 'universe-m') {
+        const tot = nCk(n, m)
+        if (tot > UNIVERSE_TICKET_CAP) {
+          return res.status(400).json({
+            error: `Universe C(n,m) mode needs ${tot.toLocaleString()} combinations. Cap is ${UNIVERSE_TICKET_CAP.toLocaleString()}. Reduce pool size or choose another mode.`,
+          })
+        }
+        tickets = exactUniverseTickets(variablePool, m, []) // No constraints for M-tuples for now
+      } else {
+        // greedy, scan, or lb mode
+        let limit = null
+        if (mode === 'scan') {
+          limit = Math.max(1, scanCount)
+        } else if (mode === 'lb') {
+          const stats = calculateWheelStats(n, variableK, m)
+          limit = stats.lowerBound
+        }
+        const result = greedyWheel(variablePool, variableK, m, effort, seed, limit, variableConstraints)
+        tickets = result.tickets
       }
-      const result = greedyWheel(pool, k, m, effort, seed, limit)
-      tickets = result.tickets
+
+      // 3. Append fixed numbers to every ticket
+    if (fixedNumbers.length > 0) {
+      tickets = tickets.map(t => [...t, ...fixedNumbers].sort((a, b) => a - b))
     }
 
     // Calculate coverage breakdown
-    const coverageBreakdown = calculateCoverageBreakdown(pool, tickets, k)
+    // If fixed numbers are used, we calculate coverage on the VARIABLE part, 
+    // assuming fixed numbers are always drawn (bankers).
+    // Then we map the variable match levels to total match levels.
+    let coverageBreakdown = []
+    
+    if (fixedNumbers.length > 0) {
+       // Calculate coverage on variable pool using variable tickets (before appending fixed)
+       // We need to reconstruct variable tickets since we already appended fixed numbers
+       const varTickets = tickets.map(t => t.filter(n => !fixedSet.has(n)))
+       // Use minMatch=1 for variable part so we can show "fixed+1 if fixed+1"
+       const varBreakdown = calculateCoverageBreakdown(variablePool, varTickets, variableK, 1)
+       
+       // Remap levels: e.g. 3/3 (var) -> 4/4 (total) if fixed=1
+       coverageBreakdown = varBreakdown.map(item => {
+         const [match, total] = item.level.split('/').map(Number)
+         return {
+           level: `${match + fixedNumbers.length}/${total + fixedNumbers.length}`,
+           tickets: item.tickets
+         }
+       })
+    } else {
+       coverageBreakdown = calculateCoverageBreakdown(pool, tickets, k)
+    }
 
     res.json({
       tickets,

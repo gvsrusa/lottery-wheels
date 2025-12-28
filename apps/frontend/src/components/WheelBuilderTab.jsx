@@ -11,6 +11,24 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || ''
 
 export function WheelBuilderTab({ gameConfig }) {
   const [selectedPool, setSelectedPool] = useState([])
+  const [fixedNumbers, setFixedNumbers] = useState([])
+  const [fixedBonusNumbers, setFixedBonusNumbers] = useState([]) // New state for bonus numbers
+  const [ticketBonuses, setTicketBonuses] = useState([]) // Randomly assigned bonuses per ticket
+
+
+  // Group Constraints (10 groups: 0-9)
+  const [isGroupConstraintsEnabled, setIsGroupConstraintsEnabled] = useState(false)
+  const [groupConstraints, setGroupConstraints] = useState(
+    Array.from({ length: 10 }, (_, i) => ({
+      id: i, // Groups 0-9
+      numbers: [],
+      rawInput: '',
+      min: 0,
+      max: 1 // Default max is 1
+    }))
+  )
+  const [bonusInputMode, setBonusInputMode] = useState('grid') // 'grid' or 'text'
+  const [bonusTextInput, setBonusTextInput] = useState('')
   const [inputMode, setInputMode] = useState('grid') // 'grid' or 'text'
   const [textInput, setTextInput] = useState('')
   const [guarantee, setGuarantee] = useState(3)
@@ -35,7 +53,22 @@ export function WheelBuilderTab({ gameConfig }) {
   // Reset state when game changes
   useEffect(() => {
     setSelectedPool([])
+    setFixedNumbers([])
+    setFixedBonusNumbers([]) // Reset bonus numbers
+    // Reset group constraints
+    setIsGroupConstraintsEnabled(false)
+    setGroupConstraints(
+      Array.from({ length: 10 }, (_, i) => ({
+        id: i, // Groups 0-9
+        numbers: [],
+        rawInput: '',
+        min: 0,
+        max: 1 // Default max is 1
+      }))
+    )
+    setBonusTextInput('')
     setTickets([])
+    setTicketBonuses([])
     setIsGenerating(false)
     setLoadingMessage('')
     setProofStatus(null)
@@ -48,9 +81,81 @@ export function WheelBuilderTab({ gameConfig }) {
 
   // Toggle number selection
   const toggleNumber = (num) => {
-    setSelectedPool((prev) =>
+    setSelectedPool((prev) => {
+      const newPool = prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num].sort((a, b) => a - b)
+      // If removing from pool, also remove from fixed
+      if (prev.includes(num)) {
+        setFixedNumbers(f => f.filter(n => n !== num))
+      }
+      return newPool
+    })
+  }
+
+  const toggleFixedNumber = (num) => {
+    if (!selectedPool.includes(num)) return
+    setFixedNumbers((prev) =>
       prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num].sort((a, b) => a - b)
     )
+  }
+
+  const toggleFixedBonusNumber = (num) => {
+    setFixedBonusNumbers((prev) => {
+      let newNums
+      // If already selected, remove it
+      if (prev.includes(num)) {
+        newNums = prev.filter((n) => n !== num)
+      } else {
+        // Allow selecting as many as desired (no limit)
+        newNums = [...prev, num].sort((a, b) => a - b)
+      }
+      setBonusTextInput(newNums.join(', '))
+      return newNums
+    })
+  }
+
+  // Effect to randomize bonus numbers across tickets
+  useEffect(() => {
+    if (!tickets.length || !gameConfig.hasBonus) {
+      setTicketBonuses([])
+      return
+    }
+
+    const pick = gameConfig.bonusNumbers.pick
+    const totalSlots = tickets.length * pick
+    let pool = []
+
+    // If user selected specific bonus numbers, use them.
+    // Otherwise, use ALL possible bonus numbers for a balanced random distribution.
+    let sourcePool = fixedBonusNumbers.length > 0
+      ? [...fixedBonusNumbers]
+      : Array.from({ length: gameConfig.bonusNumbers.max }, (_, i) => i + 1)
+
+    // Fill pool to meet demand, cycling through available source numbers
+    // We want a roughly equal distribution
+    while (pool.length < totalSlots) {
+      pool = pool.concat(sourcePool)
+    }
+    // Trim to exact size required
+    pool = pool.slice(0, totalSlots)
+
+    // Shuffle (Fisher-Yates)
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+
+    // Chunk for each ticket
+    const bonuses = []
+    for (let i = 0; i < tickets.length; i++) {
+      bonuses.push(pool.slice(i * pick, (i + 1) * pick).sort((a, b) => a - b))
+    }
+    setTicketBonuses(bonuses)
+  }, [tickets, fixedBonusNumbers, gameConfig])
+
+  // Helper to get bonus numbers for a specific ticket index
+  const getBonusForTicket = (ticketIndex) => {
+    if (!gameConfig.hasBonus || !ticketBonuses[ticketIndex]) return []
+    return ticketBonuses[ticketIndex]
   }
 
   // Handle text input parsing
@@ -67,6 +172,69 @@ export function WheelBuilderTab({ gameConfig }) {
       .sort((a, b) => a - b)
 
     setSelectedPool(numbers)
+    setFixedNumbers([]) // Reset fixed numbers when pool changes
+  }
+
+  // Handle bonus text input parsing
+  const handleBonusTextInputChange = (e) => {
+    const value = e.target.value
+    setBonusTextInput(value)
+
+    const maxBonus = gameConfig.bonusNumbers.max
+
+    // Parse comma-separated numbers
+    const numbers = value
+      .split(/[\s,]+/) // Split by comma or whitespace
+      .map(s => parseInt(s.trim(), 10))
+      .filter(n => !isNaN(n) && n >= 1 && n <= maxBonus)
+      .filter((n, idx, arr) => arr.indexOf(n) === idx) // Remove duplicates
+      .sort((a, b) => a - b)
+
+    setFixedBonusNumbers(numbers)
+  }
+
+  // Toggle number in a group (Exclusive selection)
+  const toggleGroupNumber = (groupId, num) => {
+    setGroupConstraints(prev => prev.map(g => {
+      if (g.id !== groupId) return g
+
+      const isSelected = g.numbers.includes(num)
+      let newNumbers
+      if (isSelected) {
+        newNumbers = g.numbers.filter(n => n !== num)
+      } else {
+        newNumbers = [...g.numbers, num].sort((a, b) => a - b)
+      }
+      return { ...g, numbers: newNumbers }
+    }))
+  }
+
+  // Update Min/Max for a group
+  const updateGroupConstraint = (id, field, value) => {
+    const val = parseInt(value, 10)
+    if (isNaN(val) || val < 0) return
+
+    setGroupConstraints(prev => prev.map(g => {
+      if (g.id !== id) return g
+
+      let newData = { ...g }
+
+      if (field === 'min') {
+        newData.min = val
+        // If new min is greater than current max, increase max to match
+        if (val > g.max) {
+          newData.max = val
+        }
+      } else if (field === 'max') {
+        newData.max = val
+        // If new max is less than current min, decrease min to match
+        if (val < g.min) {
+          newData.min = val
+        }
+      }
+
+      return newData
+    }))
   }
 
   // Apply text input to pool
@@ -79,13 +247,19 @@ export function WheelBuilderTab({ gameConfig }) {
       .sort((a, b) => a - b)
 
     setSelectedPool(numbers)
+    setFixedNumbers([]) // Reset fixed numbers when pool changes
   }
 
   // Clear all selections and reset state
   const clearPool = () => {
     setSelectedPool([])
+    setFixedNumbers([])
+    setFixedNumbers([])
+    setFixedBonusNumbers([]) // Reset bonus numbers
+    setBonusTextInput('')
     setTextInput('')
     setTickets([])
+    setTicketBonuses([])
     setIsGenerating(false)
     setLoadingMessage('')
     setProofStatus(null)
@@ -95,29 +269,47 @@ export function WheelBuilderTab({ gameConfig }) {
   }
 
   // Select all numbers
-  const selectAll = () => setSelectedPool([...NUMBER_RANGE])
+  const selectAll = () => {
+    setSelectedPool([...NUMBER_RANGE])
+    setFixedNumbers([]) // Reset fixed numbers when pool changes
+  }
 
   // Quick select random pool
   const quickSelectRandom = (count) => {
     const shuffled = [...NUMBER_RANGE].sort(() => Math.random() - 0.5)
     setSelectedPool(shuffled.slice(0, count).sort((a, b) => a - b))
+    setFixedNumbers([]) // Reset fixed numbers when pool changes
   }
 
   // Calculate statistics
   const stats = useMemo(() => {
-    const n = selectedPool.length
-    const m = guarantee
-    if (n < k) {
+    const variablePoolSize = selectedPool.length - fixedNumbers.length
+    const variableK = k - fixedNumbers.length
+    // guarantee is now TOTAL guarantee. Variable guarantee = total - fixed
+    const variableM = guarantee - fixedNumbers.length
+
+    if (variablePoolSize < variableK || variableK <= 0 || variableM <= 0) {
       return {
         lbCount: 0,
         lbSch: 0,
         lowerBound: 0,
         universeSize: 0,
         allTickets: 0,
+        hasActiveConstraints: false,
       }
     }
-    return calculateWheelStats(n, k, m)
-  }, [selectedPool, guarantee, k])
+
+    // Check if group constraints are active and meaningful
+    const hasActiveConstraints = isGroupConstraintsEnabled &&
+      groupConstraints.some(g => g.numbers.length > 0 && (g.min > 0 || g.max < k))
+
+    const baseStats = calculateWheelStats(variablePoolSize, variableK, variableM)
+
+    return {
+      ...baseStats,
+      hasActiveConstraints,
+    }
+  }, [selectedPool, fixedNumbers, guarantee, k, isGroupConstraintsEnabled, groupConstraints])
 
   // Paginated tickets
   const paginatedTickets = useMemo(() => {
@@ -174,11 +366,30 @@ export function WheelBuilderTab({ gameConfig }) {
   // Generate tickets
   const handleGenerate = async (mode) => {
     const n = selectedPool.length
-    const m = guarantee
+    // guarantee is TOTAL. variableM = guarantee - fixedNumbers.length
+    const m = guarantee - fixedNumbers.length
 
     // Validation
     if (n < k) {
       alert(`Please select at least ${k} numbers for ${gameConfig.name}`)
+      return
+    }
+
+    if (fixedNumbers.length >= k) {
+      alert(`Cannot fix ${fixedNumbers.length} numbers for a pick-${k} game. Max fixed is ${k - 1}.`)
+      return
+    }
+
+    // Check if guarantee is possible with fixed numbers
+    const variableK = k - fixedNumbers.length
+    if (m > variableK) {
+      // This shouldn't happen with UI constraints, but good to check
+      alert(`Guarantee ${guarantee} is too high for the remaining ${variableK} spots.`)
+      return
+    }
+
+    if (m <= 0) {
+      alert(`Guarantee must be greater than fixed numbers count.`)
       return
     }
 
@@ -200,6 +411,8 @@ export function WheelBuilderTab({ gameConfig }) {
           seed,
           scanCount,
           mode,
+          fixedNumbers,
+          groupConstraints: isGroupConstraintsEnabled ? groupConstraints : [],
         }),
       })
 
@@ -234,7 +447,17 @@ export function WheelBuilderTab({ gameConfig }) {
     if (tickets.length === 0) return
 
     const headers = ['ticket', ...Array.from({ length: k }, (_, i) => `n${i + 1}`)]
-    const rows = tickets.map((t, i) => [i + 1, ...t])
+    if (gameConfig.hasBonus) {
+      headers.push('bonus')
+    }
+    const rows = tickets.map((t, i) => {
+      const row = [i + 1, ...t]
+      if (gameConfig.hasBonus) {
+        const bonus = getBonusForTicket(i)
+        row.push(bonus.join(' '))
+      }
+      return row
+    })
     const csv = toCSV([headers, ...rows])
 
     const blob = new Blob([csv], { type: 'text/csv' })
@@ -252,7 +475,14 @@ export function WheelBuilderTab({ gameConfig }) {
   const handleCopy = async () => {
     if (tickets.length === 0) return
 
-    const txt = tickets.map((t) => t.join(' ')).join('\n')
+    const txt = tickets.map((t, i) => {
+      let line = t.join(' ')
+      if (gameConfig.hasBonus) {
+        const bonus = getBonusForTicket(i)
+        line += ` + ${bonus.join(' ')}`
+      }
+      return line
+    }).join('\n')
     try {
       await navigator.clipboard.writeText(txt)
       alert('Copied to clipboard!')
@@ -276,21 +506,19 @@ export function WheelBuilderTab({ gameConfig }) {
         <div className="flex gap-2 mb-4">
           <button
             onClick={() => setInputMode('grid')}
-            className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all min-h-[44px] touch-manipulation ${
-              inputMode === 'grid'
-                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white'
-                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-            }`}
+            className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all min-h-[44px] touch-manipulation ${inputMode === 'grid'
+              ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white'
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
           >
             Grid Selection
           </button>
           <button
             onClick={() => setInputMode('text')}
-            className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all min-h-[44px] touch-manipulation ${
-              inputMode === 'text'
-                ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white'
-                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-            }`}
+            className={`px-4 py-2 text-xs sm:text-sm font-bold rounded-lg transition-all min-h-[44px] touch-manipulation ${inputMode === 'text'
+              ? 'bg-gradient-to-r from-cyan-500 to-blue-600 text-white'
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
           >
             Text Input
           </button>
@@ -384,6 +612,239 @@ export function WheelBuilderTab({ gameConfig }) {
             </div>
           </div>
         )}
+
+        {/* Fixed Numbers Selection */}
+        {selectedPool.length > 0 && (
+          <div className="mt-4 p-4 bg-slate-800/60 border border-slate-700 rounded-xl">
+            <div className="flex justify-between items-center mb-2">
+              <p className="text-sm font-bold text-slate-300">
+                Select Fixed Numbers (Bankers):
+              </p>
+              <span className="text-xs text-slate-400">
+                {fixedNumbers.length} / {k - 1} max
+              </span>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              {selectedPool.map((num) => {
+                const isFixed = fixedNumbers.includes(num)
+                return (
+                  <button
+                    key={num}
+                    onClick={() => toggleFixedNumber(num)}
+                    className={`w-10 h-10 rounded-lg font-bold shadow-lg transition-all ${isFixed
+                      ? 'bg-gradient-to-br from-amber-500 to-orange-600 text-white ring-2 ring-amber-300'
+                      : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                      }`}
+                  >
+                    {num}
+                  </button>
+                )
+              })}
+            </div>
+            <p className="text-xs text-slate-500 mt-2">
+              Click numbers above to toggle them as "Fixed". Fixed numbers appear in every ticket.
+            </p>
+          </div>
+        )}
+
+        {/* Bonus Number Selection */}
+        {gameConfig.hasBonus && (
+          <div className="mt-4 p-4 bg-slate-800/60 border border-slate-700 rounded-xl">
+            <div className="flex justify-between items-center mb-2">
+              <p className="text-sm font-bold text-slate-300">
+                Select Bonus Numbers (Optional):
+              </p>
+              <span className="text-xs text-slate-400">
+                {fixedBonusNumbers.length} / {gameConfig.bonusNumbers.pick}
+              </span>
+            </div>
+
+            {/* Bonus Input Mode Toggle */}
+            <div className="flex gap-2 mb-4">
+              <button
+                onClick={() => setBonusInputMode('grid')}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${bonusInputMode === 'grid'
+                  ? 'bg-gradient-to-r from-red-500 to-pink-600 text-white'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+              >
+                Grid
+              </button>
+              <button
+                onClick={() => setBonusInputMode('text')}
+                className={`px-3 py-1 text-xs font-bold rounded-lg transition-all ${bonusInputMode === 'text'
+                  ? 'bg-gradient-to-r from-red-500 to-pink-600 text-white'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+              >
+                Text
+              </button>
+            </div>
+
+            {bonusInputMode === 'text' ? (
+              <div className="mb-2">
+                <textarea
+                  value={bonusTextInput}
+                  onChange={handleBonusTextInputChange}
+                  placeholder={`Enter bonus numbers (1-${gameConfig.bonusNumbers.max})`}
+                  className="w-full px-3 py-2 bg-slate-800 border-2 border-slate-700 rounded-lg text-slate-100 text-sm focus:border-pink-500 focus:outline-none font-mono min-h-[60px]"
+                />
+                <p className="text-xs text-slate-400 mt-1">
+                  {fixedBonusNumbers.length} valid bonus numbers: {fixedBonusNumbers.join(', ')}
+                </p>
+              </div>
+            ) : (
+              <div className="flex flex-wrap gap-2">
+                {Array.from({ length: gameConfig.bonusNumbers.max }, (_, i) => i + 1).map((num) => {
+                  const isSelected = fixedBonusNumbers.includes(num)
+                  return (
+                    <button
+                      key={num}
+                      onClick={() => toggleFixedBonusNumber(num)}
+                      className={`w-10 h-10 rounded-full font-bold shadow-lg transition-all ${isSelected
+                        ? 'bg-gradient-to-br from-red-500 to-pink-600 text-white ring-2 ring-red-300'
+                        : 'bg-slate-700 text-slate-400 hover:bg-slate-600'
+                        }`}
+                    >
+                      {num}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            <p className="text-xs text-slate-500 mt-2">
+              These bonus numbers will be appended to every ticket.
+              <br />
+              <b>Note:</b> If none are selected, all available bonus numbers ({gameConfig.bonusNumbers.max}) will be distributed randomly and evenly across tickets.
+            </p>
+          </div>
+        )}
+      </section>
+
+      <section className={`relative transition-all duration-300 border-2 rounded-2xl sm:rounded-3xl p-4 sm:p-6 shadow-2xl ${isGroupConstraintsEnabled
+        ? 'bg-slate-900/80 backdrop-blur-xl border-slate-700'
+        : 'bg-slate-900/60 backdrop-blur-xl border-slate-800'
+        }`}>
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className={`text-xl sm:text-2xl font-bold bg-gradient-to-r bg-clip-text text-transparent transition-all ${isGroupConstraintsEnabled
+              ? 'from-cyan-400 to-blue-500'
+              : 'from-cyan-400/50 to-blue-500/50'
+              }`}>
+              Group Constraints
+            </h2>
+            <p className="text-slate-400 text-xs sm:text-sm">
+              Divide numbers into groups and set Min/Max occurrences.
+            </p>
+          </div>
+
+          <button
+            onClick={() => setIsGroupConstraintsEnabled(!isGroupConstraintsEnabled)}
+            className={`relative inline-flex h-8 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-cyan-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${isGroupConstraintsEnabled ? 'bg-cyan-600' : 'bg-slate-700'
+              }`}
+          >
+            <span className="sr-only">Enable Group Constraints</span>
+            <span
+              className={`inline-block h-6 w-6 transform rounded-full bg-white transition-transform ${isGroupConstraintsEnabled ? 'translate-x-7' : 'translate-x-1'
+                }`}
+            />
+          </button>
+        </div>
+
+        {/* Info box explaining what group constraints do */}
+        {isGroupConstraintsEnabled && (
+          <div className="mb-4 p-3 bg-cyan-900/20 border border-cyan-700/30 rounded-lg">
+            <div className="flex items-start gap-2">
+              <svg className="w-5 h-5 text-cyan-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+              </svg>
+              <div className="text-xs text-cyan-100 leading-relaxed">
+                <p className="font-semibold mb-1">How Group Constraints Work:</p>
+                <p className="text-cyan-200/90">
+                  Organize your numbers into groups (e.g., Group 0: hot numbers, Group 1: cold numbers).
+                  Set Min/Max to control how many numbers from each group appear in <strong>every ticket</strong>.
+                  For example: "Min: 2, Max: 3" means each ticket must have 2-3 numbers from that group.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {isGroupConstraintsEnabled && (
+          <div className="animate-in fade-in slide-in-from-top-4 duration-300">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {groupConstraints.map((group) => (
+                <div key={group.id} className="p-3 bg-slate-800/50 border border-slate-700 rounded-xl">
+                  <div className="flex justify-between items-center mb-2">
+                    <span className="font-bold text-slate-200 text-sm">Group {group.id}</span>
+                    <span className="text-xs text-slate-500">{group.numbers.length} nums</span>
+                  </div>
+
+                  {/* Exclusive Number Selection Grid */}
+                  <div className="mb-3">
+                    <p className="text-[10px] uppercase text-slate-500 font-bold mb-1">Select Numbers</p>
+                    <div className="flex flex-wrap gap-1">
+                      {selectedPool.map(num => {
+                        // Check if this number is taken by ANY OTHER group
+                        const takenByOther = groupConstraints.some(g => g.id !== group.id && g.numbers.includes(num))
+
+                        // If taken by other, hide it (as requested: "removed from selection")
+                        if (takenByOther) return null
+
+                        const isSelected = group.numbers.includes(num)
+
+                        return (
+                          <button
+                            key={num}
+                            onClick={() => toggleGroupNumber(group.id, num)}
+                            className={`w-8 h-8 flex items-center justify-center rounded text-xs font-bold transition-all ${isSelected
+                              ? 'bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg scale-105'
+                              : 'bg-slate-700 text-slate-400 hover:bg-slate-600 hover:text-slate-200'
+                              }`}
+                          >
+                            {num}
+                          </button>
+                        )
+                      })}
+                      {/* Show placeholder if no numbers available */}
+                      {selectedPool.every(num => groupConstraints.some(g => g.id !== group.id && g.numbers.includes(num)) && !group.numbers.includes(num)) && (
+                        <span className="text-xs text-slate-600 italic">No available numbers</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Min/Max Controls */}
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1">
+                      <label className="block text-[10px] uppercase text-slate-500 font-bold mb-1">Min</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={k}
+                        value={group.min}
+                        onChange={(e) => updateGroupConstraint(group.id, 'min', e.target.value)}
+                        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-slate-200 text-xs focus:border-cyan-500 focus:outline-none"
+                      />
+                    </div>
+                    <div className="flex-1">
+                      <label className="block text-[10px] uppercase text-slate-500 font-bold mb-1">Max</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max={k}
+                        value={group.max}
+                        onChange={(e) => updateGroupConstraint(group.id, 'max', e.target.value)}
+                        className="w-full px-2 py-1 bg-slate-900 border border-slate-700 rounded text-slate-200 text-xs focus:border-cyan-500 focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </section>
 
       {/* Configuration Card */}
@@ -408,7 +869,10 @@ export function WheelBuilderTab({ gameConfig }) {
               onChange={(e) => setGuarantee(parseInt(e.target.value, 10))}
               className="w-full px-3 sm:px-4 py-2 sm:py-2.5 bg-slate-800 border-2 border-slate-700 rounded-lg sm:rounded-xl text-slate-100 text-sm focus:border-cyan-500 focus:outline-none min-h-[44px]"
             >
-              {Array.from({ length: k - 1 }, (_, i) => i + 2).map((m) => (
+              {/* Show options from (fixed + 1) up to k. 
+                  Example: Pick 6, Fixed 1. Range: 2 to 6.
+              */}
+              {Array.from({ length: k - fixedNumbers.length }, (_, i) => i + fixedNumbers.length + 1).map((m) => (
                 <option key={m} value={m}>
                   {m} / {k}
                 </option>
@@ -532,13 +996,26 @@ export function WheelBuilderTab({ gameConfig }) {
 
       {/* Statistics */}
       {selectedPool.length >= k && (
-        <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
-          <StatCard label="Pool Size (n)" value={selectedPool.length} />
-          <StatCard label="Guarantee" value={`${guarantee} / ${k}`} />
-          <StatCard label="Lower Bound (counting)" value={stats.lbCount.toLocaleString()} />
-          <StatCard label="Lower Bound (Schönheim)" value={stats.lbSch.toLocaleString()} />
-          <StatCard label="Universe C(n,m)" value={stats.universeSize.toLocaleString()} hint="m-subsets" />
-        </section>
+        <>
+          {stats.hasActiveConstraints && (
+            <div className="mb-3 p-3 bg-amber-900/20 border border-amber-700/30 rounded-lg flex items-start gap-2">
+              <svg className="w-5 h-5 text-amber-400 flex-shrink-0 mt-0.5" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+              <div className="text-xs text-amber-200 leading-relaxed">
+                <strong>Group Constraints Active:</strong> Statistics shown below are calculated without considering group constraints.
+                The actual search space may be significantly smaller, resulting in fewer valid ticket combinations.
+              </div>
+            </div>
+          )}
+          <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3 md:gap-4">
+            <StatCard label="Pool Size (n)" value={selectedPool.length} />
+            <StatCard label="Fixed Numbers" value={fixedNumbers.length} />
+            <StatCard label="Variable Spots" value={k - fixedNumbers.length} />
+            <StatCard label="Guarantee" value={`${guarantee} / ${k}`} />
+            <StatCard label="Lower Bound" value={stats.lowerBound.toLocaleString()} />
+          </section>
+        </>
       )}
 
       {/* Tickets Display */}
@@ -583,6 +1060,11 @@ export function WheelBuilderTab({ gameConfig }) {
                       <span className="text-cyan-300 font-semibold">
                         {ticket.map((n) => String(n).padStart(2, ' ')).join(' ')}
                       </span>
+                      {gameConfig.hasBonus && getBonusForTicket(actualIndex).length > 0 && (
+                        <span className="text-pink-400 font-bold ml-2">
+                          + {getBonusForTicket(actualIndex).join(' ')}
+                        </span>
+                      )}
                     </div>
                   )
                 })}
@@ -710,9 +1192,8 @@ export function WheelBuilderTab({ gameConfig }) {
                     {coverageBreakdown.map((breakdown, idx) => (
                       <tr
                         key={`${breakdown.level}-${idx}`}
-                        className={`hover:bg-emerald-500/10 transition-all duration-200 ${
-                          idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'
-                        }`}
+                        className={`hover:bg-emerald-500/10 transition-all duration-200 ${idx % 2 === 0 ? 'bg-slate-800/30' : 'bg-slate-800/50'
+                          }`}
                       >
                         <td className="px-2 sm:px-4 py-2 sm:py-3 text-xs sm:text-sm font-bold text-slate-200 border-b border-slate-700/30">
                           {breakdown.level}
