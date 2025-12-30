@@ -755,24 +755,28 @@ async function verifyCoverage(jobId, pool, k, m, tickets, constraints = [], fixe
 
 // API: Generate tickets
 app.post('/api/generate-tickets', async (req, res) => {
-    const { pool, k, guarantee, effort, seed, scanCount, mode, fixedNumbers = [], groupConstraints = [] } = req.body
+  const { pool: rawPool, k, guarantee, effort, seed, scanCount, mode, fixedNumbers: rawFixed = [], groupConstraints = [] } = req.body
 
-  console.log('Received generation request:', { poolSize: pool?.length, k, guarantee, mode, fixedNumbers })
+  console.log('Received generation request:', { poolSize: rawPool?.length, k, guarantee, mode, fixedNumbers: rawFixed })
 
-  if (!pool || !k || !guarantee || !effort || !mode) {
+  if (!rawPool || !k || !guarantee || !effort || !mode) {
     console.log('Missing parameters')
     return res.status(400).json({ error: 'Missing required parameters' })
   }
+  
+  // Enforce sorting
+  const pool = [...rawPool].sort((a, b) => a - b)
+  const fixedNumbers = [...rawFixed].sort((a, b) => a - b)
 
   try {
-      // 1. Validate fixed numbers
-      if (fixedNumbers.length > 0) {
-        // Check if all fixed numbers are in the pool
-        const poolSet = new Set(pool)
-        const invalidFixed = fixedNumbers.filter(n => !poolSet.has(n))
-        if (invalidFixed.length > 0) {
-          return res.status(400).json({ error: `Fixed numbers [${invalidFixed.join(', ')}] are not in the selected pool` })
-        }
+    // 1. Validate fixed numbers
+    if (fixedNumbers.length > 0) {
+      // Check if all fixed numbers are in the pool
+      const poolSet = new Set(pool)
+      const invalidFixed = fixedNumbers.filter(n => !poolSet.has(n))
+      if (invalidFixed.length > 0) {
+        return res.status(400).json({ error: `Fixed numbers [${invalidFixed.join(', ')}] are not in the selected pool` })
+      }
         
         // Check if too many fixed numbers
         if (fixedNumbers.length >= k) {
@@ -942,11 +946,15 @@ app.post('/api/calculate-stats', (req, res) => {
 
 // API: Submit proof verification job
 app.post('/api/verify-proof', async (req, res) => {
-  const { pool, k, m, tickets, groupConstraints, fixedNumbers } = req.body
+  const { pool: rawPool, k, m, tickets, groupConstraints, fixedNumbers: rawFixed = [] } = req.body
 
-  if (!pool || !k || !m || !tickets) {
+  if (!rawPool || !k || !m || !tickets) {
     return res.status(400).json({ error: 'Missing required parameters' })
   }
+  
+  // Enforce sorting
+  const pool = [...rawPool].sort((a, b) => a - b)
+  const fixedNumbers = [...rawFixed].sort((a, b) => a - b)
 
   const jobId = `job_${jobIdCounter++}`
   proofQueue.set(jobId, {
