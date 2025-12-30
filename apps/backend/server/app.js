@@ -185,14 +185,101 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
   const rand = makeLCG(hashSeed(seed))
   const n = pool.length
   
-  // If no constraints, legacy behavior
+  // Determine if we strictly follow combinatorial logic
+  const totalM = nCk(n, m)
+  const exact = totalM <= HARD_EXACT_BUILD
+
+  // --- LEGACY OPTIMIZED PATH (No Constraints) ---
   if (!constraints || constraints.length === 0) {
-     const totalM = nCk(n, m)
-     const exact = totalM <= HARD_EXACT_BUILD
-     // Legacy Fallback logic if needed, but we can just use the new system with no groups.
-     // However, for pure performance, we might want to keep simple path if exact match legacy speed is needed.
-     // But let's unify for consistency.
+     const mPerTicket = nCk(k, m)
+     
+     // 1. Initialize Uncovered Tuples
+     let uncovered = null
+     let chooseIdx = null
+     
+     if (exact) {
+         uncovered = new Set(kCombinations(pool, m).map(serialize))
+     }
+     
+     chooseIdx = kCombinations(
+       Array.from({ length: k }, (_, i) => i),
+       m
+     )
+     
+     const tickets = []
+     const seen = new Set()
+     let steps = 0
+     const maxSteps = 200000 // Same limit
+     
+     // Fast Gain Helper
+     const calcGain = (t) => {
+         if (!exact || !uncovered) return mPerTicket
+         let g = 0
+         for (const idx of chooseIdx) {
+             const sub = idx.map(i => t[i])
+             if (uncovered.has(serialize(sub))) g += 1
+         }
+         return g
+     }
+     
+     // Fast Random Helper
+     const randomTicket = () => {
+         const shuffled = [...pool]
+         for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(rand() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+         }
+         return shuffled.slice(0, k).sort((a, b) => a - b)
+     }
+
+     while (true) {
+        if (limit != null && tickets.length >= limit) break
+        if (exact && uncovered && uncovered.size === 0 && limit === null) break
+        if (steps >= maxSteps) break
+        steps++
+        
+        let best = null
+        let bestGain = -1
+        
+        const effortValid = Math.max(10, effort)
+        
+        for (let i = 0; i < effortValid; i++) {
+            const cand = randomTicket()
+            const key = serialize(cand)
+            if (seen.has(key)) continue
+            
+            const g = calcGain(cand)
+            if (g > bestGain) {
+                bestGain = g
+                best = cand
+                if (g === mPerTicket) break
+            }
+        }
+        
+        if (!best) {
+            const fallback = randomTicket()
+            const key = fallback ? serialize(fallback) : null
+            if (fallback && !seen.has(key)) {
+                best = fallback
+            }
+        }
+        
+        if (best) {
+            tickets.push(best)
+            seen.add(serialize(best))
+            if (exact && uncovered) {
+                 for (const idx of chooseIdx) {
+                     const sub = idx.map(i => best[i])
+                     uncovered.delete(serialize(sub))
+                 }
+            }
+        } else {
+            break 
+        }
+     }
+     return { tickets }
   }
+  // --- END LEGACY PATH ---
 
   // 1. Setup Groups for Variable Pool
   const poolSet = new Set(pool)
@@ -294,9 +381,8 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
   }
 
   // --- Coverage Strategy Logic ---
-  const totalM = nCk(n, m)
-  const exact = totalM <= HARD_EXACT_BUILD
-
+  // totalM and exact are already calculated at the top
+ 
   // User Feedback: Strict Combinatorial Coverage is preferred over "Lotto Design" optimization.
   // Users expect to see specific M-tuples covered if they are valid.
   // We strictly use Combinatorial Mode but with robust "Impossible Tuple" filtering (Slack Check).
