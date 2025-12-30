@@ -237,10 +237,12 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
   const globalMax = activeGroups.reduce((sum, g) => sum + g.max, 0)
 
   if (globalMin > k) {
-    throw new Error(`Impossible constraints: Minimums sum to ${globalMin}, but only ${k} spots available.`)
+    const breakdown = activeGroups.map(g => `${g.id}:${g.min}`).join(', ')
+    throw new Error(`Impossible constraints: Minimums sum to ${globalMin} (${breakdown}), but only ${k} spots available.`)
   }
   if (globalMax < k) {
-    throw new Error(`Impossible constraints: Maximums sum to ${globalMax}, but need to fill ${k} spots.`)
+    const breakdown = activeGroups.map(g => `${g.id}:${g.max}`).join(', ')
+    throw new Error(`Impossible constraints: Maximums sum to ${globalMax} (${breakdown}), but need to fill ${k} spots.`)
   }
 
   // Helper to generate a random valid quota distribution
