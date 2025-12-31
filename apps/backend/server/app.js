@@ -232,6 +232,7 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
          return shuffled.slice(0, k).sort((a, b) => a - b)
      }
 
+     let consecutiveFailures = 0
      while (true) {
         if (limit != null && tickets.length >= limit) break
         if (exact && uncovered && uncovered.size === 0 && limit === null) break
@@ -273,8 +274,10 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
                      uncovered.delete(serialize(sub))
                  }
             }
+            consecutiveFailures = 0
         } else {
-            break 
+            consecutiveFailures++
+            if (consecutiveFailures > 50) break
         }
      }
      return { tickets }
@@ -429,6 +432,7 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
       return g
   }
 
+  let consecutiveFailures = 0
   while (true) {
     if (limit != null && tickets.length >= limit) break
     if (uncovered && uncovered.size === 0 && limit === null) break // Coverage complete
@@ -475,8 +479,10 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
             uncovered.delete(serialize(sub))
           }
       }
+      consecutiveFailures = 0
     } else {
-      break
+      consecutiveFailures++
+      if (consecutiveFailures > 50) break
     }
   }
 
@@ -566,6 +572,42 @@ function calculateCoverageBreakdown(pool, tickets, k, minMatch = 2, constraints 
 
   // For each match level from k down to minMatch
   for (let matchLevel = k; matchLevel >= minMatch; matchLevel--) {
+    // Optimization: Theoretical Upper Bound Check
+    // A single ticket of size k contains C(k, matchLevel) combinations of size matchLevel.
+    // The total number of scenarios to cover is C(pool.length, matchLevel).
+    // If tickets.length * C(k, matchLevel) < C(pool.length, matchLevel), 
+    // it is mathematically impossible to cover all scenarios.
+    const combinationsPerTicket = nCk(k, matchLevel)
+    const totalScenarios = nCk(pool.length, matchLevel)
+    const maxTheoreticalCoverage = tickets.length * combinationsPerTicket
+    
+    // Note: This optimization assumes NO CONSTRAINTS or very weak constraints.
+    // If constraints strongly reduce totalScenarios, this check might be too pessimistic if we used raw totalScenarios?
+    // Actually, totalScenarios is the raw C(n, m). 
+    // If constraints exist, the ACTUAL coverable scenarios are fewer.
+    // So checking against raw totalScenarios is safe (conservative). 
+    // If maxTheoreticalCoverage < rawTotalScenarios, we usually can't say for sure 
+    // unless we know how many scenarios are valid.
+    // But for "Guaranteed" logic, if we assume worst case (all valid), this holds.
+    // However, to be strictly correct with constraints, we should skip this check 
+    // or compute valid scenarios count first. 
+    // Since calculating validScenariosCount converts this to O(N), we can just do the loop.
+    // But for the specific bug report (matches showing 1 when they should be 0), 
+    // this check helps if constraints are OFF (which they are in the user case).
+    
+    let theoreticalImpossible = false
+    if (!hasConstraints && maxTheoreticalCoverage < totalScenarios) {
+        theoreticalImpossible = true
+    }
+
+    if (theoreticalImpossible) {
+         breakdown.push({
+          level: `${matchLevel}/${k}`,
+          tickets: 0,
+        })
+        continue
+    }
+
     // Generate all possible scenarios where exactly matchLevel numbers from pool are drawn
     const poolSubsets = kCombinations(pool, matchLevel)
 
@@ -576,9 +618,6 @@ function calculateCoverageBreakdown(pool, tickets, k, minMatch = 2, constraints 
     for (const drawnFromPool of poolSubsets) {
        // If constraints are active, ignore scenarios that are impossible to draw
        if (hasConstraints) {
-         // Use the shared STRICT checker.
-         // This ensures that we only consider draws that could possibly be part of a valid winning ticket (size k).
-         // If a draw implies a violation of Max/Min/Slack constraints when extended to size k, it's impossible.
          if (!checkTupleConstraints(drawnFromPool, activeGroups, k)) {
            continue
          }
@@ -597,6 +636,12 @@ function calculateCoverageBreakdown(pool, tickets, k, minMatch = 2, constraints 
       }
 
       minWinningTickets = Math.min(minWinningTickets, winningCount)
+      
+      // Optimization: If we found a scenario with 0 winning tickets, the minimum is 0. 
+      // We can stop checking other scenarios for this level.
+      if (minWinningTickets === 0) {
+        break
+      }
     }
     
     // If no valid scenarios existed (edge case), don't report Infinity
