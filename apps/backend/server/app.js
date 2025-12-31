@@ -232,6 +232,7 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
          return shuffled.slice(0, k).sort((a, b) => a - b)
      }
 
+     let consecutiveFailures = 0
      while (true) {
         if (limit != null && tickets.length >= limit) break
         if (exact && uncovered && uncovered.size === 0 && limit === null) break
@@ -273,8 +274,10 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
                      uncovered.delete(serialize(sub))
                  }
             }
+            consecutiveFailures = 0
         } else {
-            break 
+            consecutiveFailures++
+            if (consecutiveFailures > 50) break
         }
      }
      return { tickets }
@@ -429,6 +432,7 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
       return g
   }
 
+  let consecutiveFailures = 0
   while (true) {
     if (limit != null && tickets.length >= limit) break
     if (uncovered && uncovered.size === 0 && limit === null) break // Coverage complete
@@ -475,8 +479,10 @@ function greedyWheel(pool, k, m, effort, seed, limit = null, constraints = []) {
             uncovered.delete(serialize(sub))
           }
       }
+      consecutiveFailures = 0
     } else {
-      break
+      consecutiveFailures++
+      if (consecutiveFailures > 50) break
     }
   }
 
