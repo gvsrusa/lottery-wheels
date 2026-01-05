@@ -14,6 +14,7 @@ export function WheelBuilderTab({ gameConfig }) {
   const [fixedNumbers, setFixedNumbers] = useState([])
   const [fixedBonusNumbers, setFixedBonusNumbers] = useState([]) // New state for bonus numbers
   const [ticketBonuses, setTicketBonuses] = useState([]) // Randomly assigned bonuses per ticket
+  const [preventBonusOverlap, setPreventBonusOverlap] = useState(true) // Default to true: prevent main/bonus overlap
 
 
   // Group Constraints (10 groups: 0-9)
@@ -55,6 +56,7 @@ export function WheelBuilderTab({ gameConfig }) {
     setSelectedPool([])
     setFixedNumbers([])
     setFixedBonusNumbers([]) // Reset bonus numbers
+    setPreventBonusOverlap(true) // Reset overlap preference
     // Reset group constraints
     setIsGroupConstraintsEnabled(false)
     setGroupConstraints(
@@ -113,44 +115,69 @@ export function WheelBuilderTab({ gameConfig }) {
     })
   }
 
-  // Effect to randomize bonus numbers across tickets
+  // Effect to randomize bonus numbers across tickets with disjoint constraint
   useEffect(() => {
     if (!tickets.length || !gameConfig.hasBonus) {
       setTicketBonuses([])
       return
     }
 
-    const pick = gameConfig.bonusNumbers.pick
-    const totalSlots = tickets.length * pick
-    let pool = []
+    const { pick, max } = gameConfig.bonusNumbers
 
-    // If user selected specific bonus numbers, use them.
-    // Otherwise, use ALL possible bonus numbers for a balanced random distribution.
-    let sourcePool = fixedBonusNumbers.length > 0
+    // Determine the source pool of bonus numbers
+    // If user selected specific fixed bonuses, use those.
+    // Otherwise, use ALL possible bonus numbers (1 to max).
+    const sourcePool = fixedBonusNumbers.length > 0
       ? [...fixedBonusNumbers]
-      : Array.from({ length: gameConfig.bonusNumbers.max }, (_, i) => i + 1)
+      : Array.from({ length: max }, (_, i) => i + 1)
 
-    // Fill pool to meet demand, cycling through available source numbers
-    // We want a roughly equal distribution
-    while (pool.length < totalSlots) {
-      pool = pool.concat(sourcePool)
-    }
-    // Trim to exact size required
-    pool = pool.slice(0, totalSlots)
+    // Track usage of each bonus number to ensure balanced distribution
+    const usageCounts = {}
+    sourcePool.forEach(n => usageCounts[n] = 0)
 
-    // Shuffle (Fisher-Yates)
-    for (let i = pool.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [pool[i], pool[j]] = [pool[j], pool[i]];
-    }
+    const newTicketBonuses = tickets.map(ticketNumbers => {
+      const ticketBonusSet = []
 
-    // Chunk for each ticket
-    const bonuses = []
-    for (let i = 0; i < tickets.length; i++) {
-      bonuses.push(pool.slice(i * pick, (i + 1) * pick).sort((a, b) => a - b))
-    }
-    setTicketBonuses(bonuses)
-  }, [tickets, fixedBonusNumbers, gameConfig])
+      // We need 'pick' bonus numbers for this ticket
+      for (let i = 0; i < pick; i++) {
+        // 1. Identify valid candidates:
+        //    - Must be in sourcePool
+        //    - Must NOT be already selected as a bonus for this ticket
+        //    - IF preventBonusOverlap is true: Must NOT be in the main ticket numbers
+        let candidates = sourcePool.filter(n => {
+          if (ticketBonusSet.includes(n)) return false
+          if (preventBonusOverlap && ticketNumbers.includes(n)) return false
+          return true
+        })
+
+        // Fallback: If strict disjointness is impossible (e.g. pool [1,2,3] and ticket [1,2,3]),
+        // allow overlap rather than crashing or breaking the ticket structure.
+        if (candidates.length === 0 && preventBonusOverlap) {
+          candidates = sourcePool.filter(n => !ticketBonusSet.includes(n))
+        }
+
+        // 2. Sort candidates by usage count (ascending) to maintain balance
+        //    If counts are equal, shuffle randomly to avoid patterns
+        candidates.sort((a, b) => {
+          const countDiff = (usageCounts[a] || 0) - (usageCounts[b] || 0)
+          if (countDiff !== 0) return countDiff
+          return Math.random() - 0.5
+        })
+
+        // 3. Pick the best candidate (least used)
+        //    If we still have no candidates (e.g. sourcePool exhausted for this ticket), this handles it gracefully
+        if (candidates.length > 0) {
+          const selected = candidates[0]
+          ticketBonusSet.push(selected)
+          usageCounts[selected] = (usageCounts[selected] || 0) + 1
+        }
+      }
+
+      return ticketBonusSet.sort((a, b) => a - b)
+    })
+
+    setTicketBonuses(newTicketBonuses)
+  }, [tickets, fixedBonusNumbers, gameConfig, preventBonusOverlap])
 
   // Helper to get bonus numbers for a specific ticket index
   const getBonusForTicket = (ticketIndex) => {
@@ -666,6 +693,33 @@ export function WheelBuilderTab({ gameConfig }) {
               <span className="text-xs text-slate-400">
                 {fixedBonusNumbers.length} / {gameConfig.bonusNumbers.pick}
               </span>
+            </div>
+
+            {/* Bonus Overlap Toggle */}
+            <div className="mb-4 p-3 bg-slate-900/50 border border-slate-700/50 rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setPreventBonusOverlap(!preventBonusOverlap)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none ${preventBonusOverlap ? 'bg-emerald-500' : 'bg-slate-700'
+                    }`}
+                >
+                  <span className="sr-only">Toggle overlap prevention</span>
+                  <span
+                    className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${preventBonusOverlap ? 'translate-x-6' : 'translate-x-1'
+                      }`}
+                  />
+                </button>
+                <div>
+                  <p className={`text-sm font-bold ${preventBonusOverlap ? 'text-emerald-400' : 'text-slate-400'}`}>
+                    {preventBonusOverlap ? 'Overlap Prevention Active' : 'Overlap Prevention Disabled'}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    {preventBonusOverlap
+                      ? 'Bonus numbers will NOT match main numbers on the same ticket.'
+                      : 'Bonus numbers are selected independently and may match main numbers.'}
+                  </p>
+                </div>
+              </div>
             </div>
 
             {/* Bonus Input Mode Toggle */}
